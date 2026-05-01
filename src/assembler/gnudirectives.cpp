@@ -24,6 +24,8 @@ static QString numTokensError(unsigned expected, const TokenizedSrcLine &line) {
 DirectiveVec gnuDirectives() {
   DirectiveVec directives;
 
+  add_directive(directives, floatDirective());
+
   add_directive(directives, stringDirective());
   add_directive(directives, ascizDirective());
   add_directive(directives, zeroDirective());
@@ -102,6 +104,38 @@ Result<QByteArray> stringFunctor(const AssemblerBase *,
   string.replace("\\n", "\n");
   string.remove('\"');
   return {string.toUtf8().append('\0')};
+}
+
+Directive floatDirective() {
+  auto floatFunctor =
+      [](
+          const AssemblerBase *assembler,
+          const DirectiveArg &arg
+          ) -> Result<QByteArray>
+  {
+    if(arg.line.tokens.length() < 1) {
+      return {Error(arg.line, "Invalid number of arguments, you must declare al least a float value")};
+    }
+    QByteArray bytes;
+    for(const auto &token: arg.line.tokens){
+      bool ok = false;
+      const float f = token.toFloat(&ok);
+      //const float f = QLocale::c().toFloat(token, &ok);
+      uint32_t u = 0;
+      if (ok) {
+        static_assert(sizeof(float) == sizeof(uint32_t), "The float argument and the casted representation of float value in binary must be the same size");
+        std::memcpy(&u,&f, sizeof(uint32_t));
+      } else {
+        return {Error(arg.line, QString("Invalid float value format as argument. You introduced %1").arg(token))};
+      }
+      for (int i = 0; i< 4; ++i) {
+        bytes.append(static_cast<char>(u & 0xffu));
+        u >>= 8;
+      }
+    }
+    return {bytes};
+  };
+  return Directive(".float", floatFunctor);
 }
 
 Directive ascizDirective() { return Directive(".asciz", &stringFunctor); }
