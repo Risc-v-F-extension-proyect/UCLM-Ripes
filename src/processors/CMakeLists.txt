@@ -52,6 +52,11 @@ endmacro()
 
 # RISC-V Processors
 create_isa_lib(RISC-V)
+
+target_sources(RISC-V_lib
+  PRIVATE
+    RISC-V/rv_fregisterfile.h
+)
 create_vsrtl_processor(RISC-V rvss)
 create_vsrtl_processor(RISC-V rv5mc)
 create_vsrtl_processor(RISC-V rv5mc1m)

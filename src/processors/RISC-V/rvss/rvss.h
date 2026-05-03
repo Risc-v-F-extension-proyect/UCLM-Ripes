@@ -157,6 +157,9 @@ public:
   ADDRESSSPACEMM(m_memory);
   ADDRESSSPACE(m_regMem);
 
+  // Address space for F extention instructions
+  ADDRESSSPACE(m_fRegMem);
+
   SUBCOMPONENT(ecallChecker, EcallChecker);
 
   // Ripes interface compliance
@@ -179,7 +182,12 @@ public:
     pc_reg->setInitValue(address);
   }
   AddressSpaceMM &getMemory() override { return *m_memory; }
-  VInt getRegister(const std::string_view &, unsigned i) const override {
+
+  VInt getRegister(const std::string_view &regFile, unsigned i) const override {
+    if (regFile == RVISA::FPR) {
+      return m_fRegMem->readMemConst(i << ceillog2(XLEN / CHAR_BIT),
+                                     XLEN / CHAR_BIT);
+    }
     return registerFile->getRegister(i);
   }
   void finalize(FinalizeReason fr) override {
@@ -204,7 +212,11 @@ public:
     return instrAccess;
   }
 
-  void setRegister(const std::string_view &, unsigned i, VInt v) override {
+  void setRegister(const std::string_view &regFile, unsigned i, VInt v) override {
+    if (regFile == RVISA::FPR) {
+      m_fRegMem->writeMem(i << ceillog2(XLEN / CHAR_BIT), v, XLEN / CHAR_BIT);
+      return;
+    }
     setSynchronousValue(registerFile->_wr_mem, i, v);
   }
 

@@ -54,6 +54,10 @@ extern const QStringList GPRRegAliases;
 extern const QStringList GPRRegNames;
 extern const QStringList GPRRegDescs;
 
+extern const QStringList FPRRegAliases;
+extern const QStringList FPRRegNames;
+extern const QStringList FPRRegDescs;
+
 constexpr unsigned INSTR_BITS = 32;
 
 template <typename InstrImpl>
@@ -105,7 +109,7 @@ struct RV_GPRInfo : public RegFileInfoInterface {
 };
 
 /// Defines information about the floating-point RISC-V register file.
-struct RV_FPRInfo : public RegFileInfoInterface {
+struct RV_FPRInfo_default : public RegFileInfoInterface {
   std::string_view regFileName() const override { return FPR; }
   std::string_view regFileDesc() const override { return FPR_DESC; }
   // TODO: Fill out RISC-V floating point register info
@@ -119,6 +123,48 @@ struct RV_FPRInfo : public RegFileInfoInterface {
     return 0;
   }
 };
+struct RV_FPRInfo : public RegFileInfoInterface {
+  std::string_view regFileName() const override { return FPR; }
+  std::string_view regFileDesc() const override { return FPR_DESC; }
+  // TODO: Fill out RISC-V floating point register info
+  unsigned int regCnt() const override { return 32; }
+
+  QString regName(unsigned i) const override {
+    return RVISA::FPRRegNames.size() > static_cast<int>(i)
+    ? RVISA::FPRRegNames.at(static_cast<int>(i))
+    : QString();
+  }
+
+  QString regAlias(unsigned i) const override {
+    return RVISA::FPRRegAliases.size() > static_cast<int>(i)
+    ? RVISA::FPRRegAliases.at(static_cast<int>(i))
+    : QString();
+  }
+
+  QString regInfo(unsigned i) const override {
+    return RVISA::FPRRegDescs.size() > static_cast<int>(i)
+    ? RVISA::FPRRegDescs.at(static_cast<int>(i))
+    : QString();
+  }
+
+  bool regIsReadOnly(unsigned) const override { return false; }
+
+  unsigned int regNumber(const QString &reg, bool &success) const override {
+    success = true;
+
+    if (RVISA::FPRRegNames.contains(reg)) {
+      return RVISA::FPRRegNames.indexOf(reg);
+    }
+
+    if (RVISA::FPRRegAliases.contains(reg)) {
+      return RVISA::FPRRegAliases.indexOf(reg);
+    }
+
+    success = false;
+    return 0;
+  }
+};
+
 
 enum class Option {
   shifts64BitVariant, // appends 'w' to 32-bit shift operations, for use in
@@ -142,10 +188,15 @@ void enableExt(const ISAInfoBase *isa, InstrVec &instructions,
                PseudoInstrVec &pseudoInstructions);
 }
 
+namespace ExtF {
+void enableExt(const ISAInfoBase *isa, InstrVec &instructions,
+               PseudoInstrVec &pseudoInstructions);
+}
+
 class RV_ISAInfoBase : public ISAInfoBase {
 public:
   static const QStringList &getSupportedExtensions() {
-    static const QStringList ext = {"M", "C"};
+    static const QStringList ext = {"M", "C", "F"};
     return ext;
   }
   static const QStringList &getDefaultExtensions() {
@@ -164,7 +215,8 @@ public:
     }
 
     m_regInfos[GPR] = std::make_unique<RV_GPRInfo>();
-    if (supportsExtension("F")) {
+    //if (supportsExtension("F")) {
+    if (extensionEnabled("F")) {
       m_regInfos[FPR] = std::make_unique<RV_FPRInfo>();
     }
 
@@ -218,6 +270,8 @@ public:
       return "Integer multiplication and division";
     if (ext == "C")
       return "Compressed instructions";
+    if (ext == "F")
+      return "Simple Floating-Point Instructions";
     Q_UNREACHABLE();
   }
 
@@ -238,6 +292,9 @@ protected:
         break;
       case 'C':
         RVISA::ExtC::enableExt(this, m_instructions, m_pseudoInstructions);
+        break;
+      case 'F':
+        RVISA::ExtF::enableExt(this, m_instructions, m_pseudoInstructions);
         break;
       }
     }
@@ -277,7 +334,9 @@ enum OpcodeID {
   OP32 = 0b0111011,
   SYSTEM = 0b1110011,
   AUIPC = 0b0010111,
-  INVALID = 0b0
+  INVALID = 0b0,
+  FP_LW    = 0b0000111, //FLW.s opcode
+  FP_SW    = 0b0100111, //FSW.s opcode
 };
 enum QuadrantID {
   QUADRANT0 = 0b00,
@@ -337,6 +396,59 @@ struct RegRs2
 template <unsigned tokenIndex>
 struct RegRd : public GPR_Reg<RegRd<tokenIndex>, tokenIndex, BitRange<7, 11>> {
   constexpr static std::string_view getName() { return "rd"; }
+};
+
+
+
+///F extendion adds
+
+/// It is defined as a 12-bit inmediat field in bits 20-31 for Flw.s
+template <unsigned tokenIndex>
+using  Imm12 = Imm<tokenIndex, 12, Repr::Signed,
+                  ImmPartSet<
+                      ImmPart<9,20,31>
+                      >>;
+
+/// It is defined as a 12-bit inmediat field in bits 7-12 and 25-31 for Fsw.s
+template <unsigned tokenIndex>
+using  Imm12s = Imm<tokenIndex, 12, Repr::Signed,
+                   ImmPartSet<
+                       ImmPart<9,7,11>,    // Trozo bajo (imm[7:11])
+                       ImmPart<0,25,31>
+                       >>; // Trozo alto (imm[25:31])
+
+/// All RISC-V Funct5 opcode parts are defined as a 5-bit field in bits 27-31
+/// of the instruction
+template <unsigned funct5, unsigned N = 32>
+struct OpPartFunct5 : public OpPart<funct5, BitRange<27, 31, N>> {};
+
+/// All RISC-V Funct5(for R4 instructions) opcode parts are defined as a 5-bit field in bits 2-6
+/// of the instruction
+template <unsigned fmt, unsigned N = 32>
+struct OpPartFmt : public OpPart<fmt, BitRange<25, 26, N>> {};
+
+/// All RISC-V Rm opcode parts are defined as a 3-bit field in bits 12-14
+/// of the instruction
+template <unsigned rm, unsigned N = 32>
+struct OpPartRm : public OpPart<rm, BitRange<12, 14, N>> {};
+
+
+template <typename RegImpl, unsigned tokenIndex, typename Range>
+struct FPR_Reg : public Reg<RegImpl, tokenIndex, Range, RV_FPRInfo> {};
+
+/// The RISC-V Rd field contains a destination register index.
+/// It is defined as a 5-bit field in bits 7-11 of the instruction
+template <unsigned tokenIndex>
+struct FRegRd : public FPR_Reg<FRegRd<tokenIndex>, tokenIndex, BitRange<7, 11>> {
+  constexpr static std::string_view getName() { return "frd"; }
+};
+
+/// The RISC-V Rs2 field contains a source register index.
+/// It is defined as a 5-bit field in bits 20-24 of the instruction
+template <unsigned tokenIndex>
+struct FRegRs2
+    : public FPR_Reg<FRegRs2<tokenIndex>, tokenIndex, BitRange<20, 24>> {
+  constexpr static std::string_view getName() { return "frs2"; }
 };
 
 }; // namespace RVISA
