@@ -49,7 +49,7 @@ template <typename InstrImpl, OpcodeID opcodeID, Rm width>
 struct F_Lw : public RV_Instruction<InstrImpl> {
   struct Opcode : public OpcodeSet<OpPartOpcode<opcodeID>,
                                    OpPartRm<static_cast<unsigned>(width)>> {};
-  struct Fields : public FieldSet<FRegRd, Imm12, RegRs1> {};
+  struct Fields : public FieldSet<FRegRd, ExtI::ImmCommon12, RegRs1> {};
 };
 
 template <typename InstrImpl, OpcodeID opcodeID, Rm width>

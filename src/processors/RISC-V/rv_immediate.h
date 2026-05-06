@@ -48,6 +48,7 @@ public:
       case RVInstr::LHU:
       case RVInstr::LWU:
       case RVInstr::LD:
+      case RVInstr::FLW:
       case RVInstr::ADDI:
       case RVInstr::SLTI:
       case RVInstr::SLTIU:
