@@ -16,6 +16,8 @@
 #include "processors/RISC-V/rv_immediate.h"
 #include "processors/RISC-V/rv_memory.h"
 #include "processors/RISC-V/rv_registerfile.h"
+#include "processors/RISC-V/rv_fregisterfile.h"
+#include "processors/RISC-V/rv_falu.h"
 #include "rv_decodeRVC.h"
 
 namespace vsrtl {
@@ -81,7 +83,34 @@ public:
     pc_4->out >> reg_wr_src->get(RegWrSrc::PC4);
     control->reg_wr_src_ctrl >> reg_wr_src->select;
 
+    data_mem->data_out >> fp_reg_wr_src->get(FpRegWrSrc::MEMREAD);
+    //falu->res >> fp_reg_wr_src->get(FpRegWrSrc::FALURES);
+    0 >> fp_reg_wr_src->get(FpRegWrSrc::FALURES);
+    fp_reg_wr_src->out >> fRegisterFile->data_in;
+    control->fp_reg_wr_src_ctrl >> fp_reg_wr_src->select;
+    control->fp_reg_do_write_ctrl >> fRegisterFile->wr_en;
     registerFile->setMemory(m_regMem);
+    fRegisterFile->setMemory(m_fRegMem);
+    fRegisterFile->setDisplayName("FP Registers");
+
+    decode->r1_reg_idx >> fRegisterFile->r1_addr;
+    decode->r2_reg_idx >> fRegisterFile->r2_addr;
+    0 >> fRegisterFile->r3_addr;
+    decode->wr_reg_idx >> fRegisterFile->wr_addr;
+    //0 >> fRegisterFile->data_in;
+    //0 >> fRegisterFile->wr_en;
+    
+    fRegisterFile->r1_out >> falu->op1;
+    fRegisterFile->r2_out >> falu->op2;
+    fRegisterFile->r3_out >> falu->op3;
+    /*
+    falu->res >> fRegisterFile->data_in;
+    0 >> falu->op1;
+    0 >> falu->op2;
+    0 >> falu->op3;*/
+    static_cast<unsigned>(FALUOp::NOP) >> falu->ctrl;
+    
+
 
     // -----------------------------------------------------------------------
     // Branch
@@ -128,7 +157,9 @@ public:
 
   // Design subcomponents
   SUBCOMPONENT(registerFile, TYPE(RegisterFile<XLEN, false>));
+  SUBCOMPONENT(fRegisterFile, TYPE(FRegisterFile<XLEN, false>));
   SUBCOMPONENT(alu, TYPE(ALU<XLEN>));
+  SUBCOMPONENT(falu, TYPE(FALU<XLEN>));
   SUBCOMPONENT(control, Control);
   SUBCOMPONENT(immediate, TYPE(Immediate<XLEN>));
   SUBCOMPONENT(decode, TYPE(DecodeRVC<XLEN>));
@@ -139,6 +170,7 @@ public:
   SUBCOMPONENT(pc_reg, Register<XLEN>);
 
   // Multiplexers
+  SUBCOMPONENT(fp_reg_wr_src, TYPE(EnumMultiplexer<FpRegWrSrc, XLEN>));
   SUBCOMPONENT(reg_wr_src, TYPE(EnumMultiplexer<RegWrSrc, XLEN>));
   SUBCOMPONENT(pc_src, TYPE(EnumMultiplexer<PcSrc, XLEN>));
   SUBCOMPONENT(alu_op1_src, TYPE(EnumMultiplexer<AluSrc1, XLEN>));
@@ -185,8 +217,7 @@ public:
 
   VInt getRegister(const std::string_view &regFile, unsigned i) const override {
     if (regFile == RVISA::FPR) {
-      return m_fRegMem->readMemConst(i << ceillog2(XLEN / CHAR_BIT),
-                                     XLEN / CHAR_BIT);
+      return fRegisterFile->getRegister(i);
     }
     return registerFile->getRegister(i);
   }
@@ -214,7 +245,7 @@ public:
 
   void setRegister(const std::string_view &regFile, unsigned i, VInt v) override {
     if (regFile == RVISA::FPR) {
-      m_fRegMem->writeMem(i << ceillog2(XLEN / CHAR_BIT), v, XLEN / CHAR_BIT);
+      setSynchronousValue(fRegisterFile->_wr_mem, i, v);
       return;
     }
     setSynchronousValue(registerFile->_wr_mem, i, v);

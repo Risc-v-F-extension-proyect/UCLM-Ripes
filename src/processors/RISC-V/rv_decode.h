@@ -26,6 +26,22 @@ public:
             case RVISA::OpcodeID::JAL: return RVInstr::JAL;
             case RVISA::OpcodeID::JALR: return RVInstr::JALR;
             case RVISA::OpcodeID::SYSTEM: return RVInstr::ECALL;
+            case RVISA::OpcodeID::FP_LW: {
+                const auto fields = RVInstrParser::getParser()->decodeI32Instr(instrValue);
+                switch (fields[2]) {
+                    case 0b010: return RVInstr::FLW;
+                    default: break;
+                }
+                break;
+            }
+            case RVISA::OpcodeID::FP_SW: {
+                const auto fields = RVInstrParser::getParser()->decodeS32Instr(instrValue);
+                switch (fields[2]) {
+                    case 0b010: return RVInstr::FSW;
+                    default: break;
+                }
+                break;
+            }
 
             case RVISA::OpcodeID::OPIMM: {
                 // I-Type

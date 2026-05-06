@@ -54,8 +54,20 @@ public:
             case RVInstr::LBU: return MemOp::LBU;
             case RVInstr::LHU: return MemOp::LHU;
             case RVInstr::LWU: return MemOp::LWU;
+            //F extesion cases
+            case RVInstr::FLW: return MemOp::LW;
+            case RVInstr::FSW: return MemOp::SW;
             default:
                 return MemOp::NOP;
+        }
+    }
+
+    static VSRTL_VT_U do_fp_reg_do_write_ctrl(RVInstr opc) {
+        switch(opc) {
+            case RVInstr::FLW:
+                return 1;
+            default:
+                return 0;
         }
     }
 
@@ -145,7 +157,7 @@ public:
         // Load/Store instructions
         case RVInstr::LB: case RVInstr::LH: case RVInstr::LW: case RVInstr::LBU: case RVInstr::LHU:
         case RVInstr::SB: case RVInstr::SH: case RVInstr::SW: case RVInstr::LWU: case RVInstr::LD:
-        case RVInstr::SD:
+        case RVInstr::SD: case RVInstr::FLW: case RVInstr::FSW:
             return AluSrc2::IMM;
 
         // Branch instructions
@@ -216,6 +228,10 @@ public:
             case RVInstr::REMW  : return ALUOp::REMW ;
             case RVInstr::REMUW : return ALUOp::REMUW;
 
+            // F extension cases
+            case RVInstr::FLW: return ALUOp::ADD;
+            case RVInstr::FSW: return ALUOp::ADD;
+
             default: return ALUOp::NOP;
         }
     }
@@ -233,6 +249,8 @@ public:
             case RVInstr::LB: case RVInstr::LH: case RVInstr::LW: case RVInstr::LBU:
             case RVInstr::LHU: case RVInstr::LWU: case RVInstr::LD:
                 return 1;
+            case RVInstr::FLW:
+                return 1;
             default: return 0;
         }
     }
@@ -247,8 +265,17 @@ public:
     mem_ctrl << [this] { return do_mem_ctrl(opcode.eValue<RVInstr>()); };
     reg_do_write_ctrl <<
         [this] { return do_reg_do_write_ctrl(opcode.eValue<RVInstr>()); };
+
+    fp_reg_do_write_ctrl <<
+        //[this] { return 0; };
+        [this] { return do_fp_reg_do_write_ctrl(opcode.eValue<RVInstr>()); };
     reg_wr_src_ctrl <<
         [this] { return do_reg_wr_src_ctrl(opcode.eValue<RVInstr>()); };
+    
+    fp_reg_wr_src_ctrl <<
+        [this] { return FpRegWrSrc::MEMREAD; };
+        //[this] { return do_fp_reg_wr_src_ctrl(opcode.evalue<RVInstr>()); };
+
     alu_op1_ctrl <<
         [this] { return do_alu_op1_ctrl(opcode.eValue<RVInstr>()); };
     alu_op2_ctrl <<
@@ -261,13 +288,15 @@ public:
   }
 
   INPUTPORT_ENUM(opcode, RVInstr);
-
+  OUTPUTPORT(fp_reg_do_write_ctrl, 1);
   OUTPUTPORT(reg_do_write_ctrl, 1);
   OUTPUTPORT(mem_do_write_ctrl, 1);
   OUTPUTPORT(mem_do_read_ctrl, 1);
   OUTPUTPORT(do_branch, 1);
   OUTPUTPORT(do_jump, 1);
+
   OUTPUTPORT_ENUM(comp_ctrl, CompOp);
+  OUTPUTPORT_ENUM(fp_reg_wr_src_ctrl, FpRegWrSrc);
   OUTPUTPORT_ENUM(reg_wr_src_ctrl, RegWrSrc);
   OUTPUTPORT_ENUM(mem_ctrl, MemOp);
   OUTPUTPORT_ENUM(alu_op1_ctrl, AluSrc1);
