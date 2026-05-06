@@ -55,6 +55,7 @@ create_isa_lib(RISC-V)
 
 target_sources(RISC-V_lib
   PRIVATE
+    RISC-V/rv_falu.h
     RISC-V/rv_fregisterfile.h
 )
 create_vsrtl_processor(RISC-V rvss)
