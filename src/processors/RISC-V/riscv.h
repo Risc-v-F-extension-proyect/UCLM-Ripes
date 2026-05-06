@@ -75,6 +75,10 @@ enum class RVInstr {
   AND,
   ECALL,
 
+  /* RV32F Instruction Set */
+  FLW,
+  FSW,
+
   /* RV32M Standard Extension */
   MUL,
   MULH,
@@ -141,6 +145,9 @@ enum class ALUOp {
   REMW,
   REMUW
 };
+
+enum class FpRegWrCtr {ENABLE, UNABLE};
+enum class FpRegWrSrc {MEMREAD, FALURES};
 enum class RegWrSrc { MEMREAD, ALURES, PC4 };
 enum class AluSrc1 { REG1, PC };
 enum class AluSrc2 { REG2, IMM };
