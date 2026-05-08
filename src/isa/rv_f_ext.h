@@ -56,7 +56,7 @@ template <typename InstrImpl, OpcodeID opcodeID, Rm width>
 struct F_Sw : public RV_Instruction<InstrImpl> {
   struct Opcode : public OpcodeSet<OpPartOpcode<opcodeID>,
                                    OpPartRm<static_cast<unsigned>(width)>> {};
-  struct Fields : public FieldSet<FRegRs2, Imm12s, RegRs1> {};
+  struct Fields : public FieldSet<FRegRs2, ExtI::TypeS::ImmS, RegRs1> {};
 };
 
 struct Flw_s : public F_Lw<Flw_s, OpcodeID::FP_LW, Rm::RDN> {

@@ -36,7 +36,7 @@ public:
             }
             case RVISA::OpcodeID::FP_SW: {
                 const auto fields = RVInstrParser::getParser()->decodeS32Instr(instrValue);
-                switch (fields[2]) {
+                switch (fields[3]) {
                     case 0b010: return RVInstr::FSW;
                     default: break;
                 }

@@ -149,6 +149,7 @@ enum class ALUOp {
 enum class FpRegWrCtr {ENABLE, UNABLE};
 enum class FpRegWrSrc {MEMREAD, FALURES};
 enum class RegWrSrc { MEMREAD, ALURES, PC4 };
+enum class DataMemWrSrc { REG2, FREG2 };
 enum class AluSrc1 { REG1, PC };
 enum class AluSrc2 { REG2, IMM };
 enum class CompOp { NOP, EQ, NE, LT, LTU, GE, GEU };

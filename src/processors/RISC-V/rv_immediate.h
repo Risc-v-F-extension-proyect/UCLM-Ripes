@@ -73,7 +73,8 @@ public:
       case RVInstr::SB:
       case RVInstr::SH:
       case RVInstr::SW:
-      case RVInstr::SD: {
+      case RVInstr::SD:
+      case RVInstr::FSW: {
         return VT_U(signextend<12>(((instr.uValue() & 0xfe000000)) >> 20) |
                     ((instr.uValue() & 0xf80) >> 7));
       }
