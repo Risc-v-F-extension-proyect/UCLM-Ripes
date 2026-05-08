@@ -144,7 +144,10 @@ public:
     // Data memory
     alu->res >> data_mem->addr;
     control->mem_do_write_ctrl >> data_mem->wr_en;
-    registerFile->r2_out >> data_mem->data_in;
+    registerFile->r2_out >> data_mem_wr_src->get(DataMemWrSrc::REG2);
+    fRegisterFile->r2_out >> data_mem_wr_src->get(DataMemWrSrc::FREG2);
+    control->data_mem_wr_src_ctrl >> data_mem_wr_src->select;
+    data_mem_wr_src->out >> data_mem->data_in;
     control->mem_ctrl >> data_mem->op;
     data_mem->mem->setMemory(m_memory);
 
@@ -172,6 +175,7 @@ public:
   // Multiplexers
   SUBCOMPONENT(fp_reg_wr_src, TYPE(EnumMultiplexer<FpRegWrSrc, XLEN>));
   SUBCOMPONENT(reg_wr_src, TYPE(EnumMultiplexer<RegWrSrc, XLEN>));
+  SUBCOMPONENT(data_mem_wr_src, TYPE(EnumMultiplexer<DataMemWrSrc, XLEN>));
   SUBCOMPONENT(pc_src, TYPE(EnumMultiplexer<PcSrc, XLEN>));
   SUBCOMPONENT(alu_op1_src, TYPE(EnumMultiplexer<AluSrc1, XLEN>));
   SUBCOMPONENT(alu_op2_src, TYPE(EnumMultiplexer<AluSrc2, XLEN>));

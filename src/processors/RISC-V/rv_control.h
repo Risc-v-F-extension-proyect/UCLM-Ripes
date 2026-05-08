@@ -120,6 +120,15 @@ public:
         }
     }
 
+    static DataMemWrSrc do_data_mem_wr_src_ctrl(RVInstr opc) {
+        switch(opc) { 
+            case RVInstr::FSW:
+                return DataMemWrSrc::FREG2;
+            default:
+                return DataMemWrSrc::REG2;
+        }
+    }
+
     static AluSrc1 do_alu_op1_ctrl(RVInstr opc) {
         switch(opc) {
             case RVInstr::AUIPC: case RVInstr::JAL:
@@ -239,6 +248,7 @@ public:
     static VSRTL_VT_U do_do_mem_write_ctrl(RVInstr opc) {
         switch(opc) {
             case RVInstr::SB: case RVInstr::SH: case RVInstr::SW: case RVInstr::SD:
+            case RVInstr::FSW:
                 return 1;
             default: return 0;
         }
@@ -271,6 +281,8 @@ public:
         [this] { return do_fp_reg_do_write_ctrl(opcode.eValue<RVInstr>()); };
     reg_wr_src_ctrl <<
         [this] { return do_reg_wr_src_ctrl(opcode.eValue<RVInstr>()); };
+    data_mem_wr_src_ctrl <<
+        [this] { return do_data_mem_wr_src_ctrl(opcode.eValue<RVInstr>()); };
     
     fp_reg_wr_src_ctrl <<
         [this] { return FpRegWrSrc::MEMREAD; };
@@ -298,6 +310,7 @@ public:
   OUTPUTPORT_ENUM(comp_ctrl, CompOp);
   OUTPUTPORT_ENUM(fp_reg_wr_src_ctrl, FpRegWrSrc);
   OUTPUTPORT_ENUM(reg_wr_src_ctrl, RegWrSrc);
+  OUTPUTPORT_ENUM(data_mem_wr_src_ctrl, DataMemWrSrc);
   OUTPUTPORT_ENUM(mem_ctrl, MemOp);
   OUTPUTPORT_ENUM(alu_op1_ctrl, AluSrc1);
   OUTPUTPORT_ENUM(alu_op2_ctrl, AluSrc2);
