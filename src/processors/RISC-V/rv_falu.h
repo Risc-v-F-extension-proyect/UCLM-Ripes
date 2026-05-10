@@ -13,64 +13,32 @@ namespace vsrtl {
 namespace core {
 using namespace Ripes;
 
-enum class FALUOp {
-  NOP,
-  FADD,
-  FSUB,
-  FMUL,
-  FDIV,
-  FMIN,
-  FMAX,
-  FSGNJ,
-  FSGNJN,
-  FSGNJX,
-  FMADD,
-  FMSUB,
-  FNMSUB,
-  FNMADD
-};
-
 template <unsigned XLEN>
 class FALU : public Component {
 public:
   SetGraphicsType(ALU);
   FALU(const std::string &name, SimComponent *parent) : Component(name, parent) {
+
+    //FALU output
     res << [this] {
-      const uint32_t lhsBits = lowerWord(op1.uValue());
-      const uint32_t rhsBits = lowerWord(op2.uValue());
-      const uint32_t addendBits = lowerWord(op3.uValue());
+      const uint32_t op1Val = lowerWord(op1.uValue());
+      const uint32_t op2Val = lowerWord(op2.uValue());
 
       switch (ctrl.eValue<FALUOp>()) {
-      case FALUOp::FADD:
-        return packSingle(unpackSingle(lhsBits) + unpackSingle(rhsBits));
-      case FALUOp::FSUB:
-        return packSingle(unpackSingle(lhsBits) - unpackSingle(rhsBits));
-      case FALUOp::FMUL:
-        return packSingle(unpackSingle(lhsBits) * unpackSingle(rhsBits));
-      case FALUOp::FDIV:
-        return packSingle(unpackSingle(lhsBits) / unpackSingle(rhsBits));
-      case FALUOp::FMIN:
-        return minSingle(lhsBits, rhsBits);
-      case FALUOp::FMAX:
-        return maxSingle(lhsBits, rhsBits);
-      case FALUOp::FSGNJ:
-        return signInject(lhsBits, rhsBits);
-      case FALUOp::FSGNJN:
-        return signInjectNeg(lhsBits, rhsBits);
-      case FALUOp::FSGNJX:
-        return signInjectXor(lhsBits, rhsBits);
-      case FALUOp::FMADD:
-        return packSingle(unpackSingle(lhsBits) * unpackSingle(rhsBits) +
-                          unpackSingle(addendBits));
-      case FALUOp::FMSUB:
-        return packSingle(unpackSingle(lhsBits) * unpackSingle(rhsBits) -
-                          unpackSingle(addendBits));
-      case FALUOp::FNMSUB:
-        return packSingle(-unpackSingle(lhsBits) * unpackSingle(rhsBits) +
-                          unpackSingle(addendBits));
-      case FALUOp::FNMADD:
-        return packSingle(-unpackSingle(lhsBits) * unpackSingle(rhsBits) -
-                          unpackSingle(addendBits));
+      case FALUOp::ADD:
+        return packSingle(unpackSingle(op1Val) + unpackSingle(op2Val));
+      case FALUOp::SUB:
+        return packSingle(unpackSingle(op1Val) - unpackSingle(op2Val));
+      case FALUOp::MUL:
+        return packSingle(unpackSingle(op1Val) * unpackSingle(op2Val));
+      case FALUOp::DIV:
+        return packSingle(unpackSingle(op1Val) / unpackSingle(op2Val));
+      case FALUOp::SQRT:
+        return packSingle(std::sqrt(unpackSingle(op1Val)));
+      case FALUOp::MIN:
+        return minSingle(op1Val, op2Val);
+      case FALUOp::MAX:
+        return maxSingle(op1Val, op2Val);
       case FALUOp::NOP:
         return VT_U(0);
       default:
@@ -133,17 +101,6 @@ private:
     return packSingle(std::fmax(lhs, rhs));
   }
 
-  static VSRTL_VT_U signInject(uint32_t lhsBits, uint32_t rhsBits) {
-    return VT_U((lhsBits & 0x7fffffffu) | (rhsBits & 0x80000000u));
-  }
-
-  static VSRTL_VT_U signInjectNeg(uint32_t lhsBits, uint32_t rhsBits) {
-    return VT_U((lhsBits & 0x7fffffffu) | (~rhsBits & 0x80000000u));
-  }
-
-  static VSRTL_VT_U signInjectXor(uint32_t lhsBits, uint32_t rhsBits) {
-    return VT_U(lhsBits ^ (rhsBits & 0x80000000u));
-  }
 };
 
 } // namespace core
