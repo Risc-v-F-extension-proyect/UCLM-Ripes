@@ -26,7 +26,7 @@ public:
             case RVISA::OpcodeID::JAL: return RVInstr::JAL;
             case RVISA::OpcodeID::JALR: return RVInstr::JALR;
             case RVISA::OpcodeID::SYSTEM: return RVInstr::ECALL;
-            case RVISA::OpcodeID::FP_LW: {
+            case RVISA::OpcodeID::LOAD_FP: {
                 const auto fields = RVInstrParser::getParser()->decodeI32Instr(instrValue);
                 switch (fields[2]) {
                     case 0b010: return RVInstr::FLW;
@@ -34,7 +34,7 @@ public:
                 }
                 break;
             }
-            case RVISA::OpcodeID::FP_SW: {
+            case RVISA::OpcodeID::STORE_FP: {
                 const auto fields = RVInstrParser::getParser()->decodeS32Instr(instrValue);
                 switch (fields[3]) {
                     case 0b010: return RVInstr::FSW;
@@ -78,6 +78,33 @@ public:
                     }
                 }
                 default: break;
+                }
+                break;
+            }
+            case RVISA::OpcodeID::OP_FP: {
+                if(m_isa && m_isa->extensionEnabled("F")){
+                    const auto fields = RVInstrParser::getParser()->decodeF32Instr(instrValue);
+                    if(fields[1] == 0b00){
+                        switch(fields[0]){
+                            case 0b00000: return RVInstr::FADD;
+                            case 0b00001: return RVInstr::FSUB;
+                            case 0b00010: return RVInstr::FMUL;
+                            case 0b00011: return RVInstr::FDIV;
+                            case 0b01011:
+                                if (fields[2] == 0b00000) {
+                                    return RVInstr::FSQRT;
+                                }
+                                break;
+                            case 0b00101:
+                                switch(fields[4]){
+                                    case 0b00: return RVInstr::FMIN;
+                                    case 0b01: return RVInstr::FMAX;
+                                    default: return RVInstr::NOP;
+                                }
+
+                            default: break;
+                        }
+                    }
                 }
                 break;
             }

@@ -71,6 +71,24 @@ public:
     decode->exp_instr >> immediate->instr;
 
     // -----------------------------------------------------------------------
+    // FP Registers
+    data_mem->data_out >> fp_reg_wr_src->get(FpRegWrSrc::MEMREAD);
+    falu->res >> fp_reg_wr_src->get(FpRegWrSrc::FALURES);
+    fp_reg_wr_src->out >> fRegisterFile->data_in;
+    control->fp_reg_wr_src_ctrl >> fp_reg_wr_src->select;
+    control->fp_reg_do_write_ctrl >> fRegisterFile->wr_en;
+
+    fRegisterFile->setMemory(m_fRegMem);
+    fRegisterFile->setDisplayName("FP Registers");
+
+    decode->r1_reg_idx >> fRegisterFile->r1_addr;
+    decode->r2_reg_idx >> fRegisterFile->r2_addr;
+    0 >> fRegisterFile->r3_addr;
+    decode->wr_reg_idx >> fRegisterFile->wr_addr;
+    //0 >> fRegisterFile->data_in;
+    //0 >> fRegisterFile->wr_en;
+
+    // -----------------------------------------------------------------------
     // Registers
     decode->wr_reg_idx >> registerFile->wr_addr;
     decode->r1_reg_idx >> registerFile->r1_addr;
@@ -83,35 +101,8 @@ public:
     pc_4->out >> reg_wr_src->get(RegWrSrc::PC4);
     control->reg_wr_src_ctrl >> reg_wr_src->select;
 
-    data_mem->data_out >> fp_reg_wr_src->get(FpRegWrSrc::MEMREAD);
-    //falu->res >> fp_reg_wr_src->get(FpRegWrSrc::FALURES);
-    0 >> fp_reg_wr_src->get(FpRegWrSrc::FALURES);
-    fp_reg_wr_src->out >> fRegisterFile->data_in;
-    control->fp_reg_wr_src_ctrl >> fp_reg_wr_src->select;
-    control->fp_reg_do_write_ctrl >> fRegisterFile->wr_en;
     registerFile->setMemory(m_regMem);
-    fRegisterFile->setMemory(m_fRegMem);
-    fRegisterFile->setDisplayName("FP Registers");
-
-    decode->r1_reg_idx >> fRegisterFile->r1_addr;
-    decode->r2_reg_idx >> fRegisterFile->r2_addr;
-    0 >> fRegisterFile->r3_addr;
-    decode->wr_reg_idx >> fRegisterFile->wr_addr;
-    //0 >> fRegisterFile->data_in;
-    //0 >> fRegisterFile->wr_en;
     
-    fRegisterFile->r1_out >> falu->op1;
-    fRegisterFile->r2_out >> falu->op2;
-    fRegisterFile->r3_out >> falu->op3;
-    /*
-    falu->res >> fRegisterFile->data_in;
-    0 >> falu->op1;
-    0 >> falu->op2;
-    0 >> falu->op3;*/
-    static_cast<unsigned>(FALUOp::NOP) >> falu->ctrl;
-    
-
-
     // -----------------------------------------------------------------------
     // Branch
     control->comp_ctrl >> branch->comp_op;
@@ -139,6 +130,13 @@ public:
     alu_op2_src->out >> alu->op2;
 
     control->alu_ctrl >> alu->ctrl;
+
+    // -----------------------------------------------------------------------
+    // FALU
+    fRegisterFile->r1_out >> falu->op1;
+    fRegisterFile->r2_out >> falu->op2;
+    fRegisterFile->r3_out >> falu->op3;
+    control->falu_ctrl >> falu->ctrl;
 
     // -----------------------------------------------------------------------
     // Data memory

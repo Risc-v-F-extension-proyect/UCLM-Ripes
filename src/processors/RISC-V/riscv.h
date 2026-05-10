@@ -78,6 +78,13 @@ enum class RVInstr {
   /* RV32F Instruction Set */
   FLW,
   FSW,
+  FADD,
+  FSUB,
+  FMUL,
+  FDIV,
+  FSQRT,
+  FMIN,
+  FMAX,
 
   /* RV32M Standard Extension */
   MUL,
@@ -146,6 +153,18 @@ enum class ALUOp {
   REMUW
 };
 
+enum class FALUOp {
+  NOP,
+  // Arithmetic-logic operations
+  ADD,
+  SUB,
+  MUL,
+  DIV,
+  SQRT,
+  MIN,
+  MAX
+};
+
 enum class FpRegWrCtr {ENABLE, UNABLE};
 enum class FpRegWrSrc {MEMREAD, FALURES};
 enum class RegWrSrc { MEMREAD, ALURES, PC4 };
@@ -211,6 +230,11 @@ public:
     return m_decodeCB216Instr(instr);
   }
 
+  //F extension
+  std::vector<uint32_t> decodeF32Instr(const uint32_t &instr) const {
+    return m_decodeF32Instr(instr);
+  }
+
 private:
   RVInstrParser() {
     m_decodeR32Instr = generateInstrParser<uint32_t>(
@@ -243,6 +267,10 @@ private:
         generateInstrParser<uint32_t>(std::vector<int>{2, 5, 3, 3, 3, 16});
     m_decodeCB216Instr =
         generateInstrParser<uint32_t>(std::vector<int>{2, 5, 3, 2, 1, 3, 16});
+
+    //F extension
+    m_decodeF32Instr = generateInstrParser<uint32_t>(
+        std::vector<int>{7, 5, 3, 5, 5, 2, 5}); // returns {funct5, fmt, rs2, rs1, rm, rd, opcode}
   }
   decode_functor<uint32_t> m_decodeU32Instr;
   decode_functor<uint32_t> m_decodeJ32Instr;
@@ -260,6 +288,9 @@ private:
   decode_functor<uint32_t> m_decodeCJ16Instr;
   decode_functor<uint32_t> m_decodeCB16Instr;
   decode_functor<uint32_t> m_decodeCB216Instr;
+
+  // F extension
+  decode_functor<uint32_t> m_decodeF32Instr;
 };
 
 } // namespace Ripes

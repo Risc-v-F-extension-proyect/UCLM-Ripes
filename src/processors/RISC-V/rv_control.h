@@ -10,6 +10,21 @@ using namespace Ripes;
 class Control : public Component {
 public:
   /* clang-format off */
+    static bool isFALUInstr(RVInstr opc) {
+        switch(opc) {
+            case RVInstr::FADD:
+            case RVInstr::FSUB:
+            case RVInstr::FMUL:
+            case RVInstr::FDIV:
+            case RVInstr::FSQRT:
+            case RVInstr::FMIN:
+            case RVInstr::FMAX:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     static CompOp do_comp_ctrl(RVInstr opc) {
         switch(opc){
             case RVInstr::BEQ: return CompOp::EQ;
@@ -67,7 +82,7 @@ public:
             case RVInstr::FLW:
                 return 1;
             default:
-                return 0;
+                return isFALUInstr(opc);
         }
     }
 
@@ -129,6 +144,10 @@ public:
         }
     }
 
+    static FpRegWrSrc do_fp_reg_wr_src_ctrl(RVInstr opc) {
+        return isFALUInstr(opc) ? FpRegWrSrc::FALURES : FpRegWrSrc::MEMREAD;
+    }
+
     static AluSrc1 do_alu_op1_ctrl(RVInstr opc) {
         switch(opc) {
             case RVInstr::AUIPC: case RVInstr::JAL:
@@ -184,6 +203,20 @@ public:
         }
     }
 
+    static FALUOp do_falu_ctrl(RVInstr opc) {
+        switch(opc){
+            case RVInstr::FADD : return FALUOp::ADD;
+            case RVInstr::FSUB : return FALUOp::SUB;
+            case RVInstr::FMUL : return FALUOp::MUL;
+            case RVInstr::FDIV : return FALUOp::DIV;
+            case RVInstr::FSQRT: return FALUOp::SQRT;
+            case RVInstr::FMIN : return FALUOp::MIN;
+            case RVInstr::FMAX : return FALUOp::MAX;
+
+            default: return FALUOp::NOP;
+
+        }
+    }
     static ALUOp do_alu_ctrl(RVInstr opc) {
         switch(opc) {
             case RVInstr::LB: case RVInstr::LH: case RVInstr::LW: case RVInstr::LBU: case RVInstr::LHU:
@@ -237,7 +270,7 @@ public:
             case RVInstr::REMW  : return ALUOp::REMW ;
             case RVInstr::REMUW : return ALUOp::REMUW;
 
-            // F extension cases
+            // F extension cases for flw and fsw
             case RVInstr::FLW: return ALUOp::ADD;
             case RVInstr::FSW: return ALUOp::ADD;
 
@@ -285,14 +318,14 @@ public:
         [this] { return do_data_mem_wr_src_ctrl(opcode.eValue<RVInstr>()); };
     
     fp_reg_wr_src_ctrl <<
-        [this] { return FpRegWrSrc::MEMREAD; };
-        //[this] { return do_fp_reg_wr_src_ctrl(opcode.evalue<RVInstr>()); };
+        [this] { return do_fp_reg_wr_src_ctrl(opcode.eValue<RVInstr>()); };
 
     alu_op1_ctrl <<
         [this] { return do_alu_op1_ctrl(opcode.eValue<RVInstr>()); };
     alu_op2_ctrl <<
         [this] { return do_alu_op2_ctrl(opcode.eValue<RVInstr>()); };
     alu_ctrl << [this] { return do_alu_ctrl(opcode.eValue<RVInstr>()); };
+    falu_ctrl << [this] { return do_falu_ctrl(opcode.eValue<RVInstr>()); };
     mem_do_write_ctrl <<
         [this] { return do_do_mem_write_ctrl(opcode.eValue<RVInstr>()); };
     mem_do_read_ctrl <<
@@ -315,6 +348,10 @@ public:
   OUTPUTPORT_ENUM(alu_op1_ctrl, AluSrc1);
   OUTPUTPORT_ENUM(alu_op2_ctrl, AluSrc2);
   OUTPUTPORT_ENUM(alu_ctrl, ALUOp);
+  
+  //special outputports for F extension
+  //OUTPUTPORT_ENUM(falu_op3_ctrl, AluSrc1);
+  OUTPUTPORT_ENUM(falu_ctrl, FALUOp);
 };
 
 } // namespace core
