@@ -11,10 +11,19 @@ RVSyntaxHighlighter::RVSyntaxHighlighter(
   HighlightingRule rule;
 
   // General registers
-  registerFormat.setForeground(QColor{0x80, 0x00, 0x00});
+  registerFormat.setForeground(Colors::SweetRed);
   rule.pattern = QRegularExpression("\\b[(a|s|t|x)][0-9]{1,2}");
   rule.format = registerFormat;
   m_highlightingRules.append(rule);
+
+  // Float Point registers
+  QTextCharFormat fpRegisterFormat;
+  fpRegisterFormat.setForeground(Colors::Orange);
+
+  rule.pattern = QRegularExpression("\\bf[0-9]{1,2}\\b");
+  rule.format = fpRegisterFormat;
+  m_highlightingRules.append(rule);
+
 
   // Name-specific registers
   QStringList registerPatterns;
@@ -31,7 +40,8 @@ RVSyntaxHighlighter::RVSyntaxHighlighter(
   }
 
   // Instructions
-  instructionFormat.setForeground(Colors::BerkeleyBlue);
+  //instructionFormat.setForeground(Colors::BerkeleyBlue);
+  instructionFormat.setForeground(QColor{0x4A, 0x90, 0xE2});
   for (const auto &pattern : supportedOpcodes) {
     const QString regexPattern = "\\b" + pattern + "\\b";
     rule.pattern = QRegularExpression(regexPattern);
