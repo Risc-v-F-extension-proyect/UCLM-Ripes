@@ -12,7 +12,8 @@ void enableExt(
   using namespace ExtF;
 
   enableInstructions<
-      Flw_s, Fsw_s                                // Carga y almacenamiento
+      Flw_s, Fsw_s,
+      Fadd_s, Fsub_s, Fmul_s, Fdiv_s, Fsqrt_s, Fmin_s, Fmax_s
       >(instructions);
   if(isa->bits() == 64){
   }

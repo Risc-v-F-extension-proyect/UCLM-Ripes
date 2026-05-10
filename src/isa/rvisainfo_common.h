@@ -335,8 +335,9 @@ enum OpcodeID {
   SYSTEM = 0b1110011,
   AUIPC = 0b0010111,
   INVALID = 0b0,
-  FP_LW    = 0b0000111, //FLW.s opcode
-  FP_SW    = 0b0100111, //FSW.s opcode
+  LOAD_FP  = 0b0000111, // FLW.s opcode
+  STORE_FP = 0b0100111, // FSW.s opcode
+  OP_FP    = 0b1010011  // General opcode for F extension instructions
 };
 enum QuadrantID {
   QUADRANT0 = 0b00,
@@ -441,6 +442,14 @@ struct FPR_Reg : public Reg<RegImpl, tokenIndex, Range, RV_FPRInfo> {};
 template <unsigned tokenIndex>
 struct FRegRd : public FPR_Reg<FRegRd<tokenIndex>, tokenIndex, BitRange<7, 11>> {
   constexpr static std::string_view getName() { return "frd"; }
+};
+
+/// The RISC-V floating-point Rs1 field contains a source register index.
+/// It is defined as a 5-bit field in bits 15-19 of the instruction
+template <unsigned tokenIndex>
+struct FRegRs1
+    : public FPR_Reg<FRegRs1<tokenIndex>, tokenIndex, BitRange<15, 19>> {
+  constexpr static std::string_view getName() { return "frs1"; }
 };
 
 /// The RISC-V Rs2 field contains a source register index.
