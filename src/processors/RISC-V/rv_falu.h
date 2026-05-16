@@ -39,6 +39,24 @@ public:
         return minSingle(op1Val, op2Val);
       case FALUOp::MAX:
         return maxSingle(op1Val, op2Val);
+      case FALUOp::SGNJ: {
+        const uint32_t signMask = 0x80000000u;
+        const uint32_t op2Sign = op2Val & signMask;
+        const uint32_t op1Magnitude = op1Val & ~signMask;
+        return VT_U(op2Sign | op1Magnitude);
+      }
+      case FALUOp::SGNJN: {
+        const uint32_t signMask = 0x80000000u;
+        const uint32_t invertedSign = (~op2Val) & signMask;
+        const uint32_t op1Magnitude = op1Val & ~signMask;
+        return VT_U(invertedSign | op1Magnitude);
+      }
+      case FALUOp::SGNJX: {
+        const uint32_t signMask = 0x80000000u;
+        const uint32_t op1Magnitude = op1Val & ~signMask;
+        const uint32_t xorSign = (op1Val ^ op2Val) & signMask;
+        return VT_U(xorSign | op1Magnitude);
+      }
       case FALUOp::NOP:
         return VT_U(0);
       default:

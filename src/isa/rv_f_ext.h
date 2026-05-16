@@ -115,6 +115,21 @@ struct Fmin_s : public F_Instr<Fmin_s, Funct5::FMINMAX, Rm::RNE> {
 struct Fmax_s : public F_Instr<Fmax_s, Funct5::FMINMAX, Rm::RTZ> {
   constexpr static std::string_view NAME = "fmax.s";
 };
+/*
+  RNE = 0b000,
+  RTZ = 0b001,
+  RDN = 0b010,
+*/
+/// fsgnj, fsgnjn, fsgnjx
+struct Fsgnj_s : public F_Instr<Fsgnj_s, Funct5::FSGNJ, Rm::RNE> {
+  constexpr static std::string_view NAME = "fsgnj.s";
+};
+struct Fsgnjn_s : public F_Instr<Fsgnjn_s, Funct5::FSGNJ, Rm::RTZ> {
+  constexpr static std::string_view NAME = "fsgnjn.s";
+};
+struct Fsgnjx_s : public F_Instr<Fsgnjx_s, Funct5::FSGNJ, Rm::RDN> {
+  constexpr static std::string_view NAME = "fsgnjx.s";
+};
 
 } // namespace ExtF
 } // namespace RVISA

@@ -19,6 +19,9 @@ public:
             case RVInstr::FSQRT:
             case RVInstr::FMIN:
             case RVInstr::FMAX:
+            case RVInstr::FSGNJ:
+            case RVInstr::FSGNJN:
+            case RVInstr::FSGNJX:
                 return true;
             default:
                 return false;
@@ -212,6 +215,9 @@ public:
             case RVInstr::FSQRT: return FALUOp::SQRT;
             case RVInstr::FMIN : return FALUOp::MIN;
             case RVInstr::FMAX : return FALUOp::MAX;
+            case RVInstr::FSGNJ : return FALUOp::SGNJ;
+            case RVInstr::FSGNJN: return FALUOp::SGNJN;
+            case RVInstr::FSGNJX: return FALUOp::SGNJX;
 
             default: return FALUOp::NOP;
 

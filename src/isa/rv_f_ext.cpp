@@ -13,7 +13,8 @@ void enableExt(
 
   enableInstructions<
       Flw_s, Fsw_s,
-      Fadd_s, Fsub_s, Fmul_s, Fdiv_s, Fsqrt_s, Fmin_s, Fmax_s
+      Fadd_s, Fsub_s, Fmul_s, Fdiv_s, Fsqrt_s, Fmin_s, Fmax_s,
+      Fsgnj_s, Fsgnjn_s, Fsgnjx_s
       >(instructions);
   if(isa->bits() == 64){
   }

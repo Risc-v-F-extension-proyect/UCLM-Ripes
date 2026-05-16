@@ -101,6 +101,13 @@ public:
                                     case 0b01: return RVInstr::FMAX;
                                     default: return RVInstr::NOP;
                                 }
+                            case 0b00100:
+                                switch(fields[4]){
+                                    case 0b000: return RVInstr::FSGNJ;
+                                    case 0b001: return RVInstr::FSGNJN;
+                                    case 0b010: return RVInstr::FSGNJX;
+                                    default: return RVInstr::NOP;
+                                }
 
                             default: break;
                         }

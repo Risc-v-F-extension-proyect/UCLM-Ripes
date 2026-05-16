@@ -85,6 +85,9 @@ enum class RVInstr {
   FSQRT,
   FMIN,
   FMAX,
+  FSGNJ,
+  FSGNJN,
+  FSGNJX,
 
   /* RV32M Standard Extension */
   MUL,
@@ -162,7 +165,10 @@ enum class FALUOp {
   DIV,
   SQRT,
   MIN,
-  MAX
+  MAX,
+  SGNJ,
+  SGNJN,
+  SGNJX
 };
 
 enum class FpRegWrCtr {ENABLE, UNABLE};
