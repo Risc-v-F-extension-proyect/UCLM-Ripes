@@ -72,10 +72,7 @@ public:
 
     // -----------------------------------------------------------------------
     // FP Registers
-    data_mem->data_out >> fp_reg_wr_src->get(FpRegWrSrc::MEMREAD);
-    falu->res >> fp_reg_wr_src->get(FpRegWrSrc::FALURES);
-    fp_reg_wr_src->out >> fRegisterFile->data_in;
-    control->fp_reg_wr_src_ctrl >> fp_reg_wr_src->select;
+    reg_wr_src->out >> fRegisterFile->data_in;
     control->fp_reg_do_write_ctrl >> fRegisterFile->wr_en;
 
     fRegisterFile->setMemory(m_fRegMem);
@@ -99,6 +96,7 @@ public:
     data_mem->data_out >> reg_wr_src->get(RegWrSrc::MEMREAD);
     alu->res >> reg_wr_src->get(RegWrSrc::ALURES);
     pc_4->out >> reg_wr_src->get(RegWrSrc::PC4);
+    falu->res >> reg_wr_src->get(RegWrSrc::FALURES);
     control->reg_wr_src_ctrl >> reg_wr_src->select;
 
     registerFile->setMemory(m_regMem);
@@ -171,7 +169,6 @@ public:
   SUBCOMPONENT(pc_reg, Register<XLEN>);
 
   // Multiplexers
-  SUBCOMPONENT(fp_reg_wr_src, TYPE(EnumMultiplexer<FpRegWrSrc, XLEN>));
   SUBCOMPONENT(reg_wr_src, TYPE(EnumMultiplexer<RegWrSrc, XLEN>));
   SUBCOMPONENT(data_mem_wr_src, TYPE(EnumMultiplexer<DataMemWrSrc, XLEN>));
   SUBCOMPONENT(pc_src, TYPE(EnumMultiplexer<PcSrc, XLEN>));
