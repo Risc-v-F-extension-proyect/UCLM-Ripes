@@ -236,8 +236,8 @@
                     {
                         "key": 1,
                         "value": [
-                            "in_1",
-                            "fp_reg_wr_src"
+                            "in_3",
+                            "reg_wr_src"
                         ]
                     }
                 ],
@@ -252,22 +252,15 @@
                     {
                         "key": 3,
                         "value": {
-                            "x": 1134,
+                            "x": 1190,
                             "y": 682
                         }
                     },
                     {
                         "key": 4,
                         "value": {
-                            "x": 1134,
-                            "y": 514
-                        }
-                    },
-                    {
-                        "key": 5,
-                        "value": {
-                            "x": 1204,
-                            "y": 514
+                            "x": 1190,
+                            "y": 224
                         }
                     }
                 ],
@@ -286,10 +279,6 @@
                     },
                     {
                         "first": 4,
-                        "second": 5
-                    },
-                    {
-                        "first": 5,
                         "second": 1
                     }
                 ]
@@ -1548,10 +1537,6 @@
                             "value": 9
                         },
                         {
-                            "key": "fp_reg_wr_src_ctrl",
-                            "value": 10
-                        },
-                        {
                             "key": "comp_ctrl",
                             "value": 11
                         },
@@ -1628,38 +1613,6 @@
                     "Pos": {
                         "x": 563,
                         "y": 428
-                    },
-                    "Alignment": 132
-                },
-                "UserHidden": false,
-                "PortWidthVisible": true
-            },
-            "fp_reg_wr_src_ctrl": {
-                "Label": {
-                    "Visible": false,
-                    "Bold": false,
-                    "Italic": false,
-                    "PtSize": 8,
-                    "Text": {
-                        "str": "fp_reg_wr_src_ctrl"
-                    },
-                    "Pos": {
-                        "x": 70,
-                        "y": 140
-                    },
-                    "Alignment": 132
-                },
-                "ValueLabel": {
-                    "Visible": false,
-                    "Bold": false,
-                    "Italic": false,
-                    "PtSize": 10,
-                    "Text": {
-                        "str": ""
-                    },
-                    "Pos": {
-                        "x": 563,
-                        "y": 470
                     },
                     "Alignment": 132
                 },
@@ -2095,77 +2048,6 @@
                     },
                     {
                         "first": 3,
-                        "second": 1
-                    }
-                ]
-            },
-            "fp_reg_wr_src_ctrl_out_wire": {
-                "Parent": "Single Cycle RISC-V Processor",
-                "From port": {
-                    "first": 0,
-                    "second": [
-                        "fp_reg_wr_src_ctrl",
-                        "control"
-                    ]
-                },
-                "To ports": [
-                    {
-                        "key": 1,
-                        "value": [
-                            "select",
-                            "fp_reg_wr_src"
-                        ]
-                    }
-                ],
-                "points": [
-                    {
-                        "key": 2,
-                        "value": {
-                            "x": 474,
-                            "y": 490
-                        }
-                    },
-                    {
-                        "key": 3,
-                        "value": {
-                            "x": 474,
-                            "y": 590
-                        }
-                    },
-                    {
-                        "key": 4,
-                        "value": {
-                            "x": 1218,
-                            "y": 590
-                        }
-                    },
-                    {
-                        "key": 5,
-                        "value": {
-                            "x": 1218,
-                            "y": 556
-                        }
-                    }
-                ],
-                "wires": [
-                    {
-                        "first": 0,
-                        "second": 2
-                    },
-                    {
-                        "first": 2,
-                        "second": 3
-                    },
-                    {
-                        "first": 3,
-                        "second": 4
-                    },
-                    {
-                        "first": 4,
-                        "second": 5
-                    },
-                    {
-                        "first": 5,
                         "second": 1
                     }
                 ]
@@ -4330,13 +4212,6 @@
                             "in_0",
                             "reg_wr_src"
                         ]
-                    },
-                    {
-                        "key": 2,
-                        "value": [
-                            "in_0",
-                            "fp_reg_wr_src"
-                        ]
                     }
                 ],
                 "points": [
@@ -4360,13 +4235,6 @@
                             "x": 1176,
                             "y": 294
                         }
-                    },
-                    {
-                        "key": 6,
-                        "value": {
-                            "x": 1176,
-                            "y": 542
-                        }
                     }
                 ],
                 "wires": [
@@ -4385,14 +4253,6 @@
                     {
                         "first": 3,
                         "second": 1
-                    },
-                    {
-                        "first": 5,
-                        "second": 6
-                    },
-                    {
-                        "first": 6,
-                        "second": 2
                     }
                 ]
             },
@@ -7345,323 +7205,13 @@
             },
             "Indicators": []
         },
-        "fp_reg_wr_src": {
-            "Top name": "fp_reg_wr_src",
-            "Rect": {
-                "x": 0,
-                "y": 0,
-                "w": 2,
-                "h": 4
-            },
-            "rot": 0,
-            "Pos": {
-                "x": 1204,
-                "y": 500
-            },
-            "Visible": true,
-            "User hidden": false,
-            "Component border": [
-                {
-                    "key": 0,
-                    "value": [
-                        {
-                            "key": "in_0",
-                            "value": 3
-                        },
-                        {
-                            "key": "in_1",
-                            "value": 1
-                        },
-                        {
-                            "key": "in_2",
-                            "value": 1
-                        }
-                    ]
-                },
-                {
-                    "key": 1,
-                    "value": [
-                        {
-                            "key": "out",
-                            "value": 2
-                        }
-                    ]
-                },
-                {
-                    "key": 3,
-                    "value": [
-                        {
-                            "key": "select",
-                            "value": 1
-                        }
-                    ]
-                }
-            ],
-            "in_0": {
-                "Label": {
-                    "Visible": false,
-                    "Bold": false,
-                    "Italic": false,
-                    "PtSize": 8,
-                    "Text": {
-                        "str": "in_0"
-                    },
-                    "Pos": {
-                        "x": 0,
-                        "y": 42
-                    },
-                    "Alignment": 132
-                },
-                "ValueLabel": {
-                    "Visible": false,
-                    "Bold": false,
-                    "Italic": false,
-                    "PtSize": 10,
-                    "Text": {
-                        "str": "0x00000007"
-                    },
-                    "Pos": {
-                        "x": 1207,
-                        "y": 204
-                    },
-                    "Alignment": 132
-                },
-                "UserHidden": false,
-                "PortWidthVisible": true
-            },
-            "in_1": {
-                "Label": {
-                    "Visible": false,
-                    "Bold": false,
-                    "Italic": false,
-                    "PtSize": 8,
-                    "Text": {
-                        "str": "in_1"
-                    },
-                    "Pos": {
-                        "x": 0,
-                        "y": 28
-                    },
-                    "Alignment": 132
-                },
-                "ValueLabel": {
-                    "Visible": false,
-                    "Bold": false,
-                    "Italic": false,
-                    "PtSize": 10,
-                    "Text": {
-                        "str": "0x10000000"
-                    },
-                    "Pos": {
-                        "x": 1207,
-                        "y": 190
-                    },
-                    "Alignment": 132
-                },
-                "UserHidden": false,
-                "PortWidthVisible": true
-            },
-            "select": {
-                "Label": {
-                    "Visible": false,
-                    "Bold": false,
-                    "Italic": false,
-                    "PtSize": 8,
-                    "Text": {
-                        "str": "select"
-                    },
-                    "Pos": {
-                        "x": 14,
-                        "y": 56
-                    },
-                    "Alignment": 132
-                },
-                "ValueLabel": {
-                    "Visible": false,
-                    "Bold": false,
-                    "Italic": false,
-                    "PtSize": 10,
-                    "Text": {
-                        "str": ""
-                    },
-                    "Pos": {
-                        "x": 1221,
-                        "y": 218
-                    },
-                    "Alignment": 132
-                },
-                "UserHidden": false,
-                "PortWidthVisible": true
-            },
-            "in_2": {
-                "Label": {
-                    "Visible": false,
-                    "Bold": false,
-                    "Italic": false,
-                    "PtSize": 8,
-                    "Text": {
-                        "str": "in_2"
-                    },
-                    "Pos": {
-                        "x": 0,
-                        "y": 14
-                    },
-                    "Alignment": 132
-                },
-                "ValueLabel": {
-                    "Visible": false,
-                    "Bold": false,
-                    "Italic": false,
-                    "PtSize": 10,
-                    "Text": {
-                        "str": ""
-                    },
-                    "Pos": {
-                        "x": 1207,
-                        "y": 176
-                    },
-                    "Alignment": 132
-                },
-                "UserHidden": false,
-                "PortWidthVisible": true
-            },
-            "out": {
-                "Label": {
-                    "Visible": false,
-                    "Bold": false,
-                    "Italic": false,
-                    "PtSize": 8,
-                    "Text": {
-                        "str": "out"
-                    },
-                    "Pos": {
-                        "x": 28,
-                        "y": 28
-                    },
-                    "Alignment": 132
-                },
-                "ValueLabel": {
-                    "Visible": false,
-                    "Bold": false,
-                    "Italic": false,
-                    "PtSize": 10,
-                    "Text": {
-                        "str": "0x10000000"
-                    },
-                    "Pos": {
-                        "x": 1235,
-                        "y": 190
-                    },
-                    "Alignment": 132
-                },
-                "UserHidden": false,
-                "PortWidthVisible": true
-            },
-            "out_out_wire": {
-                "Parent": "Single Cycle RISC-V Processor",
-                "From port": {
-                    "first": 0,
-                    "second": [
-                        "out",
-                        "fp_reg_wr_src"
-                    ]
-                },
-                "To ports": [
-                    {
-                        "key": 1,
-                        "value": [
-                            "data_in",
-                            "fRegisterFile"
-                        ]
-                    }
-                ],
-                "points": [
-                    {
-                        "key": 2,
-                        "value": {
-                            "x": 1246,
-                            "y": 528
-                        }
-                    },
-                    {
-                        "key": 3,
-                        "value": {
-                            "x": 1246,
-                            "y": 602
-                        }
-                    },
-                    {
-                        "key": 4,
-                        "value": {
-                            "x": 574,
-                            "y": 602
-                        }
-                    },
-                    {
-                        "key": 5,
-                        "value": {
-                            "x": 574,
-                            "y": 626
-                        }
-                    },
-                    {
-                        "key": 6,
-                        "value": {
-                            "x": 588,
-                            "y": 626
-                        }
-                    }
-                ],
-                "wires": [
-                    {
-                        "first": 0,
-                        "second": 2
-                    },
-                    {
-                        "first": 2,
-                        "second": 3
-                    },
-                    {
-                        "first": 3,
-                        "second": 4
-                    },
-                    {
-                        "first": 4,
-                        "second": 5
-                    },
-                    {
-                        "first": 5,
-                        "second": 6
-                    },
-                    {
-                        "first": 6,
-                        "second": 1
-                    }
-                ]
-            },
-            "Name label": {
-                "Visible": false,
-                "Bold": false,
-                "Italic": false,
-                "PtSize": 12,
-                "Text": {
-                    "str": "fp_reg_wr_src"
-                },
-                "Pos": {
-                    "x": 14,
-                    "y": 0
-                },
-                "Alignment": 132
-            },
-            "Indicators": []
-        },
         "reg_wr_src": {
             "Top name": "reg_wr_src",
             "Rect": {
                 "x": 0,
                 "y": 0,
                 "w": 2,
-                "h": 4
+                "h": 5
             },
             "rot": 0,
             "Pos": {
@@ -7675,16 +7225,20 @@
                     "key": 0,
                     "value": [
                         {
-                            "key": "in_0",
-                            "value": 3
+                            "key": "in_2",
+                            "value": 1
                         },
                         {
                             "key": "in_1",
                             "value": 2
                         },
                         {
-                            "key": "in_2",
-                            "value": 1
+                            "key": "in_0",
+                            "value": 3
+                        },
+                        {
+                            "key": "in_3",
+                            "value": 4
                         }
                     ]
                 },
@@ -7782,7 +7336,7 @@
                     },
                     "Pos": {
                         "x": 14,
-                        "y": 56
+                        "y": 70
                     },
                     "Alignment": 132
                 },
@@ -7796,7 +7350,7 @@
                     },
                     "Pos": {
                         "x": 1221,
-                        "y": 218
+                        "y": 240
                     },
                     "Alignment": 132
                 },
@@ -7883,6 +7437,13 @@
                             "data_in",
                             "registerFile"
                         ]
+                    },
+                    {
+                        "key": 5,
+                        "value": [
+                            "data_in",
+                            "fRegisterFile"
+                        ]
                     }
                 ],
                 "points": [
@@ -7906,6 +7467,41 @@
                             "x": 560,
                             "y": 154
                         }
+                    },
+                    {
+                        "key": 6,
+                        "value": {
+                            "x": 1246,
+                            "y": 528
+                        }
+                    },
+                    {
+                        "key": 7,
+                        "value": {
+                            "x": 1246,
+                            "y": 602
+                        }
+                    },
+                    {
+                        "key": 8,
+                        "value": {
+                            "x": 574,
+                            "y": 602
+                        }
+                    },
+                    {
+                        "key": 9,
+                        "value": {
+                            "x": 574,
+                            "y": 626
+                        }
+                    },
+                    {
+                        "key": 10,
+                        "value": {
+                            "x": 588,
+                            "y": 626
+                        }
                     }
                 ],
                 "wires": [
@@ -7924,6 +7520,30 @@
                     {
                         "first": 2,
                         "second": 3
+                    },
+                    {
+                        "first": 0,
+                        "second": 6
+                    },
+                    {
+                        "first": 6,
+                        "second": 7
+                    },
+                    {
+                        "first": 7,
+                        "second": 8
+                    },
+                    {
+                        "first": 8,
+                        "second": 9
+                    },
+                    {
+                        "first": 9,
+                        "second": 10
+                    },
+                    {
+                        "first": 10,
+                        "second": 5
                     }
                 ]
             },
@@ -7941,7 +7561,39 @@
                 },
                 "Alignment": 132
             },
-            "Indicators": []
+            "Indicators": [],
+            "in_3": {
+                "Label": {
+                    "Visible": false,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 8,
+                    "Text": {
+                        "str": "in_3"
+                    },
+                    "Pos": {
+                        "x": 0,
+                        "y": 56
+                    },
+                    "Alignment": 132
+                },
+                "ValueLabel": {
+                    "Visible": false,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 10,
+                    "Text": {
+                        "str": ""
+                    },
+                    "Pos": {
+                        "x": 1207,
+                        "y": 226
+                    },
+                    "Alignment": 132
+                },
+                "UserHidden": false,
+                "PortWidthVisible": true
+            }
         },
         "fRegisterFile": {
             "Top name": "fRegisterFile",
