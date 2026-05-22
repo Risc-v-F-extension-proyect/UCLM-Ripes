@@ -123,21 +123,6 @@ public:
 
     static RegWrSrc do_reg_wr_src_ctrl(RVInstr opc) {
         switch(opc){
-            case RVInstr::FLW:
-                return RegWrSrc::MEMREAD;
-
-            case RVInstr::FADD:
-            case RVInstr::FSUB:
-            case RVInstr::FMUL:
-            case RVInstr::FDIV:
-            case RVInstr::FSQRT:
-            case RVInstr::FMIN:
-            case RVInstr::FMAX:
-            case RVInstr::FSGNJ:
-            case RVInstr::FSGNJN:
-            case RVInstr::FSGNJX:
-                return RegWrSrc::FALURES;
-
             // Load instructions
             case RVInstr::LB: case RVInstr::LH: case RVInstr::LW: case RVInstr::LBU:
             case RVInstr::LHU: case RVInstr::LWU: case RVInstr::LD:
@@ -160,6 +145,10 @@ public:
             default:
                 return DataMemWrSrc::REG2;
         }
+    }
+
+    static FpRegWrSrc do_fp_reg_wr_src_ctrl(RVInstr opc) {
+        return isFALUInstr(opc) ? FpRegWrSrc::FALURES : FpRegWrSrc::MEMREAD;
     }
 
     static AluSrc1 do_alu_op1_ctrl(RVInstr opc) {
@@ -333,6 +322,9 @@ public:
         [this] { return do_reg_wr_src_ctrl(opcode.eValue<RVInstr>()); };
     data_mem_wr_src_ctrl <<
         [this] { return do_data_mem_wr_src_ctrl(opcode.eValue<RVInstr>()); };
+    
+    fp_reg_wr_src_ctrl <<
+        [this] { return do_fp_reg_wr_src_ctrl(opcode.eValue<RVInstr>()); };
 
     alu_op1_ctrl <<
         [this] { return do_alu_op1_ctrl(opcode.eValue<RVInstr>()); };
@@ -355,6 +347,7 @@ public:
   OUTPUTPORT(do_jump, 1);
 
   OUTPUTPORT_ENUM(comp_ctrl, CompOp);
+  OUTPUTPORT_ENUM(fp_reg_wr_src_ctrl, FpRegWrSrc);
   OUTPUTPORT_ENUM(reg_wr_src_ctrl, RegWrSrc);
   OUTPUTPORT_ENUM(data_mem_wr_src_ctrl, DataMemWrSrc);
   OUTPUTPORT_ENUM(mem_ctrl, MemOp);

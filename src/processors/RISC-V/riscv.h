@@ -172,7 +172,8 @@ enum class FALUOp {
 };
 
 enum class FpRegWrCtr {ENABLE, UNABLE};
-enum class RegWrSrc { MEMREAD, ALURES, PC4, FALURES };
+enum class FpRegWrSrc {MEMREAD, FALURES};
+enum class RegWrSrc { MEMREAD, ALURES, PC4 };
 enum class DataMemWrSrc { REG2, FREG2 };
 enum class AluSrc1 { REG1, PC };
 enum class AluSrc2 { REG2, IMM };
