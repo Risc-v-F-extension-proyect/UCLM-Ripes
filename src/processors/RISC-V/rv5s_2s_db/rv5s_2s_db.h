@@ -280,6 +280,7 @@ public:
     memwb_reg->reg_do_write_out >> hzunit->wb_do_reg_write;
 
     idex_reg->opcode_out >> hzunit->opcode;
+    0 >> hzunit->falu_stall;
   }
 
   // Design subcomponents

@@ -15,10 +15,15 @@
 #include "processors/RISC-V/rv_control.h"
 #include "processors/RISC-V/rv_decode.h"
 #include "processors/RISC-V/rv_ecallchecker.h"
+#include "processors/RISC-V/rv_falu.h"
+#include "processors/RISC-V/rv_falu_latency.h"
+#include "processors/RISC-V/rv_fregisterfile.h"
 #include "processors/RISC-V/rv_immediate.h"
 #include "processors/RISC-V/rv_memory.h"
 #include "processors/RISC-V/rv_registerfile.h"
 #include "processors/RISC-V/rv_uncompress.h"
+#include "processors/RISC-V/rv_unified_reg_wr_src_adapter.h"
+#include "ripessettings.h"
 
 // Stage separating registers
 #include "../rv5s_no_fw_hz/rv5s_no_fw_hz_ifid.h"
@@ -48,6 +53,10 @@ public:
     m_enabledISA = ISAInfoRegistry::getISA<XLenToRVISA<XLEN>()>(extensions);
     decode->setISA(m_enabledISA);
     uncompress->setISA(m_enabledISA);
+    falu_latency->setLatencies(
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_MUL_LATENCY).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_DIV_LATENCY).toUInt());
 
     // -----------------------------------------------------------------------
     // Program counter
@@ -98,12 +107,25 @@ public:
 
     memwb_reg->wr_reg_idx_out >> registerFile->wr_addr;
     memwb_reg->reg_do_write_out >> registerFile->wr_en;
-    memwb_reg->mem_read_out >> reg_wr_src->get(RegWrSrc::MEMREAD);
-    memwb_reg->alures_out >> reg_wr_src->get(RegWrSrc::ALURES);
-    memwb_reg->pc4_out >> reg_wr_src->get(RegWrSrc::PC4);
-    memwb_reg->reg_wr_src_ctrl_out >> reg_wr_src->select;
+    memwb_reg->mem_read_out >> reg_wr_src->get(UnifiedRegWrSrc::MEMREAD);
+    memwb_reg->alures_out >> reg_wr_src->get(UnifiedRegWrSrc::ALURES);
+    memwb_reg->pc4_out >> reg_wr_src->get(UnifiedRegWrSrc::PC4);
+    memwb_reg->falures_out >> reg_wr_src->get(UnifiedRegWrSrc::FALURES);
+    memwb_reg->reg_wr_src_ctrl_out >> reg_wr_src_adapter->reg_wr_src;
+    memwb_reg->fp_reg_do_write_out >> reg_wr_src_adapter->fp_reg_do_write;
+    reg_wr_src_adapter->out >> reg_wr_src->select;
 
     registerFile->setMemory(m_regMem);
+
+    decode->r1_reg_idx >> fRegisterFile->r1_addr;
+    decode->r2_reg_idx >> fRegisterFile->r2_addr;
+    0 >> fRegisterFile->r3_addr;
+    reg_wr_src->out >> fRegisterFile->data_in;
+
+    memwb_reg->wr_reg_idx_out >> fRegisterFile->wr_addr;
+    memwb_reg->fp_reg_do_write_out >> fRegisterFile->wr_en;
+    fRegisterFile->setMemory(m_fRegMem);
+    fRegisterFile->setDisplayName("FP Registers");
 
     // -----------------------------------------------------------------------
     // Branch
@@ -151,10 +173,37 @@ public:
     idex_reg->alu_ctrl_out >> alu->ctrl;
 
     // -----------------------------------------------------------------------
+    // FALU
+
+    idex_reg->f_r1_out >> freg1_fw_src->get(ForwardingSrc::IdStage);
+    exmem_reg->falures_out >> freg1_fw_src->get(ForwardingSrc::MemStage);
+    reg_wr_src->out >> freg1_fw_src->get(ForwardingSrc::WbStage);
+    funit->falu_reg1_forwarding_ctrl >> freg1_fw_src->select;
+
+    idex_reg->f_r2_out >> freg2_fw_src->get(ForwardingSrc::IdStage);
+    exmem_reg->falures_out >> freg2_fw_src->get(ForwardingSrc::MemStage);
+    reg_wr_src->out >> freg2_fw_src->get(ForwardingSrc::WbStage);
+    funit->falu_reg2_forwarding_ctrl >> freg2_fw_src->select;
+
+    freg1_fw_src->out >> falu->op1;
+    freg2_fw_src->out >> falu->op2;
+    0 >> falu->op3;
+    idex_reg->falu_ctrl_out >> falu->ctrl;
+    idex_reg->opcode_out >> falu_latency->opcode;
+    idex_reg->valid_out >> falu_latency->valid;
+    falu_latency_remaining_reg->out >> falu_latency->remaining;
+    falu_latency->next_remaining >> falu_latency_remaining_reg->in;
+    1 >> falu_latency_remaining_reg->enable;
+    efschz_or->out >> falu_latency_remaining_reg->clear;
+
+    // -----------------------------------------------------------------------
     // Data memory
     exmem_reg->alures_out >> data_mem->addr;
     exmem_reg->mem_do_write_out >> data_mem->wr_en;
-    exmem_reg->r2_out >> data_mem->data_in;
+    exmem_reg->r2_out >> data_mem_wr_src->get(DataMemWrSrc::REG2);
+    exmem_reg->f_r2_out >> data_mem_wr_src->get(DataMemWrSrc::FREG2);
+    exmem_reg->data_mem_wr_src_ctrl_out >> data_mem_wr_src->select;
+    data_mem_wr_src->out >> data_mem->data_in;
     exmem_reg->mem_op_out >> data_mem->op;
     data_mem->mem->setMemory(m_memory);
 
@@ -189,6 +238,8 @@ public:
     ifid_reg->pc_out >> idex_reg->pc_in;
     registerFile->r1_out >> idex_reg->r1_in;
     registerFile->r2_out >> idex_reg->r2_in;
+    fRegisterFile->r1_out >> idex_reg->f_r1_in;
+    fRegisterFile->r2_out >> idex_reg->f_r2_in;
     immediate->imm >> idex_reg->imm_in;
 
     // Control
@@ -207,6 +258,9 @@ public:
     decode->r2_reg_idx >> idex_reg->rd_reg2_idx_in;
     decode->opcode >> idex_reg->opcode_in;
     control->mem_do_read_ctrl >> idex_reg->mem_do_read_in;
+    control->fp_reg_do_write_ctrl >> idex_reg->fp_reg_do_write_in;
+    control->data_mem_wr_src_ctrl >> idex_reg->data_mem_wr_src_ctrl_in;
+    control->falu_ctrl >> idex_reg->falu_ctrl_in;
 
     ifid_reg->valid_out >> idex_reg->valid_in;
 
@@ -223,6 +277,8 @@ public:
     idex_reg->pc4_out >> exmem_reg->pc4_in;
     reg2_fw_src->out >> exmem_reg->r2_in;
     alu->res >> exmem_reg->alures_in;
+    freg2_fw_src->out >> exmem_reg->f_r2_in;
+    falu->res >> exmem_reg->falures_in;
 
     // Control
     idex_reg->reg_wr_src_ctrl_out >> exmem_reg->reg_wr_src_ctrl_in;
@@ -231,6 +287,9 @@ public:
     idex_reg->mem_do_write_out >> exmem_reg->mem_do_write_in;
     idex_reg->mem_do_read_out >> exmem_reg->mem_do_read_in;
     idex_reg->mem_op_out >> exmem_reg->mem_op_in;
+    idex_reg->fp_reg_do_write_out >> exmem_reg->fp_reg_do_write_in;
+    idex_reg->data_mem_wr_src_ctrl_out >>
+        exmem_reg->data_mem_wr_src_ctrl_in;
 
     idex_reg->valid_out >> exmem_reg->valid_in;
 
@@ -243,12 +302,14 @@ public:
     exmem_reg->pc_out >> memwb_reg->pc_in;
     exmem_reg->pc4_out >> memwb_reg->pc4_in;
     exmem_reg->alures_out >> memwb_reg->alures_in;
+    exmem_reg->falures_out >> memwb_reg->falures_in;
     data_mem->data_out >> memwb_reg->mem_read_in;
 
     // Control
     exmem_reg->reg_wr_src_ctrl_out >> memwb_reg->reg_wr_src_ctrl_in;
     exmem_reg->wr_reg_idx_out >> memwb_reg->wr_reg_idx_in;
     exmem_reg->reg_do_write_out >> memwb_reg->reg_do_write_in;
+    exmem_reg->fp_reg_do_write_out >> memwb_reg->fp_reg_do_write_in;
 
     exmem_reg->valid_out >> memwb_reg->valid_in;
 
@@ -263,24 +324,35 @@ public:
     memwb_reg->wr_reg_idx_out >> funit->wb_reg_wr_idx;
     memwb_reg->reg_do_write_out >> funit->wb_reg_wr_en;
 
+    exmem_reg->fp_reg_do_write_out >> funit->mem_fp_reg_wr_en;
+
+    memwb_reg->fp_reg_do_write_out >> funit->wb_fp_reg_wr_en;
+
     // -----------------------------------------------------------------------
     // Hazard detection unit
     decode->r1_reg_idx >> hzunit->id_reg1_idx;
     decode->r2_reg_idx >> hzunit->id_reg2_idx;
+    decode->opcode >> hzunit->id_opcode;
 
     idex_reg->mem_do_read_out >> hzunit->ex_do_mem_read_en;
     idex_reg->wr_reg_idx_out >> hzunit->ex_reg_wr_idx;
+    idex_reg->reg_do_write_out >> hzunit->ex_do_reg_write_en;
+    idex_reg->fp_reg_do_write_out >> hzunit->ex_do_fp_write_en;
 
     exmem_reg->reg_do_write_out >> hzunit->mem_do_reg_write;
 
     memwb_reg->reg_do_write_out >> hzunit->wb_do_reg_write;
 
     idex_reg->opcode_out >> hzunit->opcode;
+    falu_latency->stall >> hzunit->falu_stall;
   }
 
   // Design subcomponents
   SUBCOMPONENT(registerFile, TYPE(RegisterFile<XLEN, true>));
+  SUBCOMPONENT(fRegisterFile, TYPE(FRegisterFile<XLEN, true>));
   SUBCOMPONENT(alu, TYPE(ALU<XLEN>));
+  SUBCOMPONENT(falu, TYPE(FALU<XLEN>));
+  SUBCOMPONENT(falu_latency, FALULatency);
   SUBCOMPONENT(control, Control);
   SUBCOMPONENT(immediate, TYPE(Immediate<XLEN>));
   SUBCOMPONENT(decode, TYPE(Decode<XLEN>));
@@ -290,6 +362,7 @@ public:
 
   // Registers
   SUBCOMPONENT(pc_reg, RegisterClEn<XLEN>);
+  SUBCOMPONENT(falu_latency_remaining_reg, RegisterClEn<8>);
 
   // Stage seperating registers
   SUBCOMPONENT(ifid_reg, TYPE(IFID<XLEN>));
@@ -298,12 +371,16 @@ public:
   SUBCOMPONENT(memwb_reg, TYPE(RV5S_MEMWB<XLEN>));
 
   // Multiplexers
-  SUBCOMPONENT(reg_wr_src, TYPE(EnumMultiplexer<RegWrSrc, XLEN>));
+  SUBCOMPONENT(reg_wr_src, TYPE(EnumMultiplexer<UnifiedRegWrSrc, XLEN>));
+  SUBCOMPONENT(reg_wr_src_adapter, UnifiedRegWrSrcAdapter);
   SUBCOMPONENT(pc_src, TYPE(EnumMultiplexer<PcSrc, XLEN>));
   SUBCOMPONENT(alu_op1_src, TYPE(EnumMultiplexer<AluSrc1, XLEN>));
   SUBCOMPONENT(alu_op2_src, TYPE(EnumMultiplexer<AluSrc2, XLEN>));
   SUBCOMPONENT(reg1_fw_src, TYPE(EnumMultiplexer<ForwardingSrc, XLEN>));
   SUBCOMPONENT(reg2_fw_src, TYPE(EnumMultiplexer<ForwardingSrc, XLEN>));
+  SUBCOMPONENT(freg1_fw_src, TYPE(EnumMultiplexer<ForwardingSrc, XLEN>));
+  SUBCOMPONENT(freg2_fw_src, TYPE(EnumMultiplexer<ForwardingSrc, XLEN>));
+  SUBCOMPONENT(data_mem_wr_src, TYPE(EnumMultiplexer<DataMemWrSrc, XLEN>));
   SUBCOMPONENT(pc_inc, TYPE(EnumMultiplexer<PcInc, XLEN>));
 
   // Memories
@@ -329,6 +406,7 @@ public:
   // Address spaces
   ADDRESSSPACEMM(m_memory);
   ADDRESSSPACE(m_regMem);
+  ADDRESSSPACE(m_fRegMem);
 
   SUBCOMPONENT(ecallChecker, EcallChecker);
 
@@ -394,6 +472,7 @@ public:
 
     // Gather stage state info
     StageInfo::State state = StageInfo ::State::None;
+    QString namedState;
     switch (stage.index()) {
     case IF:
       break;
@@ -403,6 +482,9 @@ public:
       }
       break;
     case EX: {
+      if (stageValid) {
+        namedState = fpEXStageName();
+      }
       if (idex_reg->stalled_out.uValue() == 1) {
         state = StageInfo::State::Stalled;
       } else if (m_cycleCount > EX && idex_reg->valid_out.uValue() == 0) {
@@ -428,7 +510,7 @@ public:
     }
     }
 
-    return StageInfo({getPcForStage(stage), stageValid, state});
+    return StageInfo({getPcForStage(stage), stageValid, state, namedState});
   }
 
   void setProgramCounter(AInt address) override {
@@ -439,7 +521,10 @@ public:
     pc_reg->setInitValue(address);
   }
   AddressSpaceMM &getMemory() override { return *m_memory; }
-  VInt getRegister(const std::string_view &, unsigned i) const override {
+  VInt getRegister(const std::string_view &regFile, unsigned i) const override {
+    if (regFile == RVISA::FPR) {
+      return fRegisterFile->getRegister(i);
+    }
     return registerFile->getRegister(i);
   }
   void finalize(FinalizeReason fr) override {
@@ -477,7 +562,11 @@ public:
     return allStagesInvalid;
   }
 
-  void setRegister(const std::string_view &, unsigned i, VInt v) override {
+  void setRegister(const std::string_view &regFile, unsigned i, VInt v) override {
+    if (regFile == RVISA::FPR) {
+      setSynchronousValue(fRegisterFile->_wr_mem, i, v);
+      return;
+    }
     setSynchronousValue(registerFile->_wr_mem, i, v);
   }
 
@@ -531,6 +620,25 @@ public:
   }
 
 private:
+  QString fpEXStageName() const {
+    const unsigned cycle = falu_latency->current_cycle.uValue();
+    if (cycle == 0) {
+      return "";
+    }
+
+    switch (idex_reg->opcode_out.eValue<RVInstr>()) {
+    case RVInstr::FADD:
+    case RVInstr::FSUB:
+      return "A" + QString::number(cycle);
+    case RVInstr::FMUL:
+      return "M" + QString::number(cycle);
+    case RVInstr::FDIV:
+      return "D" + QString::number(cycle);
+    default:
+      return "";
+    }
+  }
+
   /**
    * @brief m_syscallExitCycle
    * The variable will contain the cycle of which an exit system call was
