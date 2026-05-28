@@ -16,8 +16,14 @@ class RV5S_MEMWB : public MEMWB<XLEN> {
 public:
   RV5S_MEMWB(const std::string &name, SimComponent *parent)
       : MEMWB<XLEN>(name, parent) {
+    CONNECT_REGISTERED_INPUT(falures);
+    CONNECT_REGISTERED_INPUT(fp_reg_do_write);
+
     CONNECT_REGISTERED_INPUT(stalled);
   }
+
+  REGISTERED_INPUT(falures, XLEN);
+  REGISTERED_INPUT(fp_reg_do_write, 1);
 
   REGISTERED_INPUT(stalled, 1);
 };
