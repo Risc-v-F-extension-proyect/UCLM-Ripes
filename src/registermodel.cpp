@@ -116,7 +116,8 @@ QVariant RegisterModel::data(const QModelIndex &index, int role) const {
     case Qt::FontRole:
       return QFont(Fonts::monospace, 11);
     case Qt::ForegroundRole:
-      return QBrush(Qt::blue);
+      //return QBrush(Qt::blue);
+      return QBrush(QColor::fromRgb(150, 105, 70));
     case Qt::EditRole:
       return QVariant::fromValue(registerData(idx));
     default:
