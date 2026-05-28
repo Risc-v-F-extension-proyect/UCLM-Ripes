@@ -18,6 +18,7 @@
 #include "processors/RISC-V/rv_registerfile.h"
 #include "processors/RISC-V/rv_fregisterfile.h"
 #include "processors/RISC-V/rv_falu.h"
+#include "processors/RISC-V/rv_unified_reg_wr_src_adapter.h"
 #include "rv_decodeRVC.h"
 
 namespace vsrtl {
@@ -72,10 +73,7 @@ public:
 
     // -----------------------------------------------------------------------
     // FP Registers
-    data_mem->data_out >> fp_reg_wr_src->get(FpRegWrSrc::MEMREAD);
-    falu->res >> fp_reg_wr_src->get(FpRegWrSrc::FALURES);
-    fp_reg_wr_src->out >> fRegisterFile->data_in;
-    control->fp_reg_wr_src_ctrl >> fp_reg_wr_src->select;
+    reg_wr_src->out >> fRegisterFile->data_in;
     control->fp_reg_do_write_ctrl >> fRegisterFile->wr_en;
 
     fRegisterFile->setMemory(m_fRegMem);
@@ -96,10 +94,13 @@ public:
     control->reg_do_write_ctrl >> registerFile->wr_en;
     reg_wr_src->out >> registerFile->data_in;
 
-    data_mem->data_out >> reg_wr_src->get(RegWrSrc::MEMREAD);
-    alu->res >> reg_wr_src->get(RegWrSrc::ALURES);
-    pc_4->out >> reg_wr_src->get(RegWrSrc::PC4);
-    control->reg_wr_src_ctrl >> reg_wr_src->select;
+    data_mem->data_out >> reg_wr_src->get(UnifiedRegWrSrc::MEMREAD);
+    alu->res >> reg_wr_src->get(UnifiedRegWrSrc::ALURES);
+    pc_4->out >> reg_wr_src->get(UnifiedRegWrSrc::PC4);
+    falu->res >> reg_wr_src->get(UnifiedRegWrSrc::FALURES);
+    control->reg_wr_src_ctrl >> reg_wr_src_adapter->reg_wr_src;
+    control->fp_reg_do_write_ctrl >> reg_wr_src_adapter->fp_reg_do_write;
+    reg_wr_src_adapter->out >> reg_wr_src->select;
 
     registerFile->setMemory(m_regMem);
     
@@ -171,8 +172,8 @@ public:
   SUBCOMPONENT(pc_reg, Register<XLEN>);
 
   // Multiplexers
-  SUBCOMPONENT(fp_reg_wr_src, TYPE(EnumMultiplexer<FpRegWrSrc, XLEN>));
-  SUBCOMPONENT(reg_wr_src, TYPE(EnumMultiplexer<RegWrSrc, XLEN>));
+  SUBCOMPONENT(reg_wr_src, TYPE(EnumMultiplexer<UnifiedRegWrSrc, XLEN>));
+  SUBCOMPONENT(reg_wr_src_adapter, UnifiedRegWrSrcAdapter);
   SUBCOMPONENT(data_mem_wr_src, TYPE(EnumMultiplexer<DataMemWrSrc, XLEN>));
   SUBCOMPONENT(pc_src, TYPE(EnumMultiplexer<PcSrc, XLEN>));
   SUBCOMPONENT(alu_op1_src, TYPE(EnumMultiplexer<AluSrc1, XLEN>));
