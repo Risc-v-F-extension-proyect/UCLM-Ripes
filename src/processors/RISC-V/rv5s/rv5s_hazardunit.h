@@ -1,5 +1,6 @@
 #pragma once
 
+#include "processors/RISC-V/rv_control.h"
 #include "processors/RISC-V/riscv.h"
 
 #include "VSRTL/core/vsrtl_component.h"
@@ -10,12 +11,18 @@ using namespace Ripes;
 
 class HazardUnit : public Component {
 public:
-  HazardUnit(const std::string &name, SimComponent *parent)
+    HazardUnit(const std::string &name, SimComponent *parent)
       : Component(name, parent) {
     hazardFEEnable << [this] { return !hasHazard(); };
-    hazardIDEXEnable << [this] { return !hasEcallHazard(); };
-    hazardEXMEMClear << [this] { return hasEcallHazard(); };
-    hazardIDEXClear << [this] { return hasLoadUseHazard(); };
+    hazardIDEXEnable << [this] {
+      return !(hasEcallHazard() || falu_stall.uValue());
+    };
+    hazardEXMEMClear << [this] {
+      return hasEcallHazard() || falu_stall.uValue();
+    };
+    hazardIDEXClear << [this] {
+      return hasLoadUseHazard() || hasFPLoadUseHazard();
+    };
     stallEcallHandling << [this] { return hasEcallHazard(); };
   }
 
@@ -24,12 +31,16 @@ public:
 
   INPUTPORT(ex_reg_wr_idx, c_RVRegsBits);
   INPUTPORT(ex_do_mem_read_en, 1);
+  INPUTPORT(ex_do_reg_write_en, 1);
+  INPUTPORT(ex_do_fp_write_en, 1);
 
   INPUTPORT(mem_do_reg_write, 1);
 
   INPUTPORT(wb_do_reg_write, 1);
+  INPUTPORT(falu_stall, 1);
 
   INPUTPORT_ENUM(opcode, RVInstr);
+  INPUTPORT_ENUM(id_opcode, RVInstr);
 
   // Hazard Front End enable: Low when stalling the front end (shall be
   // connected to a register 'enable' input port). The
@@ -49,15 +60,44 @@ public:
   OUTPUTPORT(stallEcallHandling, 1);
 
 private:
-  bool hasHazard() { return hasLoadUseHazard() || hasEcallHazard(); }
+  bool hasHazard() {
+    return hasLoadUseHazard() || hasEcallHazard() ||
+           hasFPLoadUseHazard() || falu_stall.uValue();
+  }
 
   bool hasLoadUseHazard() const {
     const unsigned exidx = ex_reg_wr_idx.uValue();
     const unsigned idx1 = id_reg1_idx.uValue();
     const unsigned idx2 = id_reg2_idx.uValue();
-    const bool mrd = ex_do_mem_read_en.uValue();
+    const bool mrd =
+        ex_do_mem_read_en.uValue() && ex_do_reg_write_en.uValue();
 
     return (exidx == idx1 || exidx == idx2) && mrd;
+  }
+
+  static bool usesFPReg1(RVInstr opc) {
+    return Control::isFALUInstr(opc);
+  }
+
+  static bool usesFPReg2(RVInstr opc) {
+    switch (opc) {
+    case RVInstr::FSQRT:
+      return false;
+    case RVInstr::FSW:
+      return true;
+    default:
+      return Control::isFALUInstr(opc);
+    }
+  }
+
+  bool hasFPLoadUseHazard() const {
+    const auto opc = id_opcode.eValue<RVInstr>();
+    const unsigned exidx = ex_reg_wr_idx.uValue();
+    const bool mrd = ex_do_mem_read_en.uValue() && ex_do_fp_write_en.uValue();
+
+    const bool reg1Hazard = usesFPReg1(opc) && exidx == id_reg1_idx.uValue();
+    const bool reg2Hazard = usesFPReg2(opc) && exidx == id_reg2_idx.uValue();
+    return mrd && (reg1Hazard || reg2Hazard);
   }
 
   bool hasEcallHazard() const {
