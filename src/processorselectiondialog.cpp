@@ -3,6 +3,8 @@
 
 #include <QCheckBox>
 #include <QDialogButtonBox>
+#include <QHBoxLayout>
+#include <QLabel>
 #include <QTimer>
 
 #include "processorhandler.h"
@@ -69,6 +71,7 @@ ProcessorSelectionDialog::ProcessorSelectionDialog(QWidget *parent)
 
   // Populate register initialisations
   m_ui->regInitWidget->processorSelectionChanged(m_selectedID);
+  setupFALULatencyOptions();
 
   // Populate processor layouts
   for (const auto &layout : desc.layouts) {
@@ -110,11 +113,13 @@ ProcessorSelectionDialog::ProcessorSelectionDialog(QWidget *parent)
       } else {
         m_selectedExtensionsForID[m_selectedID].removeAll(ext);
       }
+      updateFALULatencyOptionsEnabled();
     });
   }
 
   // Disable options if there are no more available ones for current config
   setEnabledVariants();
+  updateFALULatencyOptionsEnabled();
 
   // Set current layout
   unsigned layoutID =
@@ -135,7 +140,15 @@ ProcessorSelectionDialog::ProcessorSelectionDialog(QWidget *parent)
   connect(this, &ProcessorSelectionDialog::selectionChanged, this,
           &ProcessorSelectionDialog::updateDialog);
 
-  connect(m_ui->buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
+  connect(m_ui->buttonBox, &QDialogButtonBox::accepted, this, [this] {
+    RipesSettings::setValue(RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY,
+                            getFALUAddSubLatency());
+    RipesSettings::setValue(RIPES_SETTING_RV5S_FALU_MUL_LATENCY,
+                            getFALUMulLatency());
+    RipesSettings::setValue(RIPES_SETTING_RV5S_FALU_DIV_LATENCY,
+                            getFALUDivLatency());
+    accept();
+  });
   connect(m_ui->buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
 }
 
@@ -159,6 +172,18 @@ const Layout *ProcessorSelectionDialog::getSelectedLayout() const {
   if (it != desc->layouts.end())
     return &*it;
   return nullptr;
+}
+
+unsigned ProcessorSelectionDialog::getFALUAddSubLatency() const {
+  return m_faluAddSubLatency->value();
+}
+
+unsigned ProcessorSelectionDialog::getFALUMulLatency() const {
+  return m_faluMulLatency->value();
+}
+
+unsigned ProcessorSelectionDialog::getFALUDivLatency() const {
+  return m_faluDivLatency->value();
 }
 
 void ProcessorSelectionDialog::updateSelectedTags() {
@@ -191,6 +216,7 @@ void ProcessorSelectionDialog::updateSelectedTags() {
     }
 
     emit selectionChanged(selectedISA, selectedTags);
+    updateFALULatencyOptionsEnabled();
   }
 }
 
@@ -245,6 +271,7 @@ void ProcessorSelectionDialog::updateDialog(ISA isa, ProcessorTags tags) {
       } else {
         m_selectedExtensionsForID[m_selectedID].removeAll(ext);
       }
+      updateFALULatencyOptionsEnabled();
     });
   }
 
@@ -260,6 +287,7 @@ void ProcessorSelectionDialog::updateDialog(ISA isa, ProcessorTags tags) {
   m_ui->branchSlots->setCurrentIndex(
       m_ui->branchSlots->findData(desc.tags.branchDelaySlots));
   setEnabledVariants();
+  updateFALULatencyOptionsEnabled();
 
   // Set description
   m_ui->description->setText(desc.description);
@@ -272,6 +300,45 @@ void ProcessorSelectionDialog::updateDialog(ISA isa, ProcessorTags tags) {
   for (const auto &layout : desc.layouts) {
     m_ui->layout->addItem(layout.name);
   }
+}
+
+void ProcessorSelectionDialog::setupFALULatencyOptions() {
+  auto *label = new QLabel("FALU cycles:");
+  label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+
+  m_faluLatencyWidget = new QWidget(this);
+  auto *box = new QHBoxLayout(m_faluLatencyWidget);
+  box->setContentsMargins(0, 0, 0, 0);
+  box->setSpacing(10);
+
+  auto addSpinBox = [box](QSpinBox *&spinBox, const QString &text,
+                          const QString &setting) {
+    box->addWidget(new QLabel(text));
+    spinBox = new QSpinBox;
+    spinBox->setRange(1, 255);
+    spinBox->setValue(RipesSettings::value(setting).toUInt());
+    spinBox->setFixedWidth(80);
+    box->addWidget(spinBox);
+  };
+
+  addSpinBox(m_faluAddSubLatency, "add/sub",
+             RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY);
+  addSpinBox(m_faluMulLatency, "mul", RIPES_SETTING_RV5S_FALU_MUL_LATENCY);
+  addSpinBox(m_faluDivLatency, "div", RIPES_SETTING_RV5S_FALU_DIV_LATENCY);
+  box->addStretch(1);
+
+  m_ui->configForm->addRow(label, m_faluLatencyWidget);
+}
+
+void ProcessorSelectionDialog::updateFALULatencyOptionsEnabled() {
+  if (!m_faluLatencyWidget) {
+    return;
+  }
+
+  const bool isFiveStage = m_selectedTags.datapathType == DatapathType::P_5S;
+  const bool hasFExtension =
+      m_selectedExtensionsForID[m_selectedID].contains("F");
+  m_faluLatencyWidget->setEnabled(isFiveStage && hasFExtension);
 }
 
 void ProcessorSelectionDialog::populateVariants() {

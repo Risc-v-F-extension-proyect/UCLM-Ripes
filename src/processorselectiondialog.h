@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QDialog>
+#include <QSpinBox>
 
 #include "processorregistry.h"
 
@@ -20,6 +21,9 @@ public:
   QStringList getEnabledExtensions() const;
   RegisterInitialization getRegisterInitialization() const;
   const Layout *getSelectedLayout() const;
+  unsigned getFALUAddSubLatency() const;
+  unsigned getFALUMulLatency() const;
+  unsigned getFALUDivLatency() const;
 
   ProcessorID getSelectedId() const { return m_selectedID; }
 
@@ -33,6 +37,8 @@ private slots:
 private:
   void populateVariants();
   void setEnabledVariants();
+  void setupFALULatencyOptions();
+  void updateFALULatencyOptionsEnabled();
   ProcessorID redirectToValidProcessor(ISA isa, ProcessorTags tags);
 
   ISA m_selectedISA;
@@ -40,5 +46,9 @@ private:
   ProcessorTags m_selectedTags;
   Ui::ProcessorSelectionDialog *m_ui;
   std::map<ProcessorID, QStringList> m_selectedExtensionsForID;
+  QWidget *m_faluLatencyWidget = nullptr;
+  QSpinBox *m_faluAddSubLatency = nullptr;
+  QSpinBox *m_faluMulLatency = nullptr;
+  QSpinBox *m_faluDivLatency = nullptr;
 };
 } // namespace Ripes

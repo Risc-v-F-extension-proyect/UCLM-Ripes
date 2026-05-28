@@ -133,18 +133,15 @@ QVariant PipelineDiagramModel::data(const QModelIndex &index, int role) const {
             m_cycleStageInfos.at(index.column() - 1);
         if (prevCycleStageInfo.at(si.first).stage_valid &&
             prevCycleStageInfo.at(si.first).pc == si.second.pc) {
-          stageStr = "-";
-          if (!si.second.namedState.isEmpty()) {
-            stageStr += " (" + si.second.namedState + ")";
-          }
+          stageStr =
+              si.second.namedState.isEmpty() ? "-" : si.second.namedState;
           stagesForAddr << stageStr;
           continue;
         }
       }
-      stageStr = ProcessorHandler::getProcessor()->stageName(si.first);
-      if (!si.second.namedState.isEmpty()) {
-        stageStr += " (" + si.second.namedState + ")";
-      }
+      stageStr = si.second.namedState.isEmpty()
+                     ? ProcessorHandler::getProcessor()->stageName(si.first)
+                     : si.second.namedState;
       stagesForAddr << stageStr;
     }
   }
