@@ -162,8 +162,14 @@ void ProcessorTab::loadLayout(const Layout &layout) {
   if (layout.name.isEmpty() || layout.file.isEmpty())
     return; // Not a valid layout
 
-  if (layout.stageLabelPositions.size() !=
-      ProcessorHandler::getProcessor()->structure().numStages()) {
+  for (auto sid : ProcessorHandler::getProcessor()->structure().stageIt()) {
+    if (layout.stageLabelPositions.count(sid)) {
+      continue;
+    }
+    if (sid.lane() > 0 &&
+        layout.stageLabelPositions.count({0, sid.index()})) {
+      continue;
+    }
     Q_ASSERT(false &&
              "A stage label position must be specified for each stage");
   }
@@ -191,9 +197,16 @@ void ProcessorTab::loadLayout(const Layout &layout) {
   for (auto sid : ProcessorHandler::getProcessor()->structure().stageIt()) {
     auto &label = m_stageInstructionLabels.at(sid);
     QFontMetrics metrics(label->font());
-    label->setPos(parent->boundingRect().width() *
-                      layout.stageLabelPositions.at(sid).x(),
-                  metrics.height() * layout.stageLabelPositions.at(sid).y());
+    QPointF position;
+    if (layout.stageLabelPositions.count(sid)) {
+      position = layout.stageLabelPositions.at(sid);
+    } else {
+      const auto baseStagePosition =
+          layout.stageLabelPositions.at({0, sid.index()});
+      position = QPointF{baseStagePosition.x(), static_cast<double>(sid.lane())};
+    }
+    label->setPos(parent->boundingRect().width() * position.x(),
+                  metrics.height() * position.y());
   }
 }
 

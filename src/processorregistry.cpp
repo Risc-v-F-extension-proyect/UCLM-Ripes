@@ -91,6 +91,31 @@ constexpr const char rv5mc_desc_1m[] =
     "never accessed in the same cycle to use a single memory for data and "
     "instructions.";
 
+static std::map<StageIndex, QPointF> rv5sStageLabelPositions(bool extended) {
+  const double ifX = 0.08;
+  const double idX = extended ? 0.28 : 0.29;
+  const double exX = extended ? 0.54 : 0.55;
+  const double memX = extended ? 0.78 : 0.75;
+  const double wbX = extended ? 0.9 : 0.87;
+
+  std::map<StageIndex, QPointF> positions = {
+      {{0, 0}, QPointF{ifX, 0}}, {{0, 1}, QPointF{idX, 0}},
+      {{0, 2}, QPointF{exX, 0}}, {{0, 3}, QPointF{memX, 0}},
+      {{0, 4}, QPointF{wbX, 0}},
+  };
+
+  for (unsigned lane = 1; lane <= 12; ++lane) {
+    const double y = static_cast<double>(lane);
+    positions[{lane, 0}] = QPointF{exX, y};
+    positions[{lane, 1}] = QPointF{exX, y};
+    positions[{lane, 2}] = QPointF{exX, y};
+    positions[{lane, 3}] = QPointF{memX, y};
+    positions[{lane, 4}] = QPointF{wbX, y};
+  }
+
+  return positions;
+}
+
 // --- Processor tags --- //
 
 constexpr const ProcessorTags rvss_tags = {
@@ -260,18 +285,10 @@ ProcessorRegistry::ProcessorRegistry() {
   // RISC-V 5-stage
   layouts = {{"Standard",
               ":/layouts/RISC-V/rv5s/rv5s_standard_layout.json",
-              {{{0, 0}, QPointF{0.08, 0}},
-               {{0, 1}, QPointF{0.29, 0}},
-               {{0, 2}, QPointF{0.55, 0}},
-               {{0, 3}, QPointF{0.75, 0}},
-               {{0, 4}, QPointF{0.87, 0}}}},
+              rv5sStageLabelPositions(false)},
              {"Extended",
               ":/layouts/RISC-V/rv5s/rv5s_extended_layout.json",
-              {{{0, 0}, QPointF{0.08, 0}},
-               {{0, 1}, QPointF{0.28, 0}},
-               {{0, 2}, QPointF{0.54, 0}},
-               {{0, 3}, QPointF{0.78, 0}},
-               {{0, 4}, QPointF{0.9, 0}}}}};
+              rv5sStageLabelPositions(true)}};
   defRegVals = {{RVISA::GPR, {{2, 0x7ffffff0}, {3, 0x10000000}}}};
   addProcessor(ProcInfo<vsrtl::core::RV5S<uint32_t>>(
       ProcessorID::RV32_5S, "5-stage processor", rv5s_desc, rv5s_tags, layouts,

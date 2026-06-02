@@ -300,6 +300,8 @@ public:
 
     idex_reg->opcode_out >> hzunit->opcode;
     0 >> hzunit->falu_stall;
+    0 >> hzunit->fp_unit_stall;
+    0 >> hzunit->fp_unit_busy;
   }
 
   // Design subcomponents

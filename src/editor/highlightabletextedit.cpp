@@ -36,10 +36,14 @@ void HighlightableTextEdit::paintEvent(QPaintEvent *event) {
     painter.setFont(font());
     const QRect stageStringRect =
         painter.fontMetrics().boundingRect(stageString);
+    const qreal extraRightPadding = painter.fontMetrics().horizontalAdvance('M') * 1.5;
+    const qreal textBleedPadding = painter.fontMetrics().horizontalAdvance('M') * 0.25;
     QPointF drawAt = QPointF(
-        bbr.width() - stageStringRect.width() - /* right-hand side padding*/ 10,
+        bbr.width() - stageStringRect.width() - /* right-hand side padding*/ 10 -
+            extraRightPadding - textBleedPadding,
         bbr.top() + (bbr.height() / 2.0 - stageStringRect.height() / 2.0));
-    painter.drawText(QRectF(drawAt.x(), drawAt.y(), stageStringRect.width(),
+    painter.drawText(QRectF(drawAt.x(), drawAt.y(),
+                            stageStringRect.width() + textBleedPadding * 2,
                             stageStringRect.height()),
                      stageString);
   }
@@ -83,8 +87,10 @@ void HighlightableTextEdit::highlightBlock(const QTextBlock &block,
                                            const QString &text) {
   if (!block.isValid())
     return;
-  if (!text.isEmpty())
-    m_highlightedBlocksText[block].push_back(text);
+  const auto stageText = text.trimmed();
+  if (!stageText.isEmpty() &&
+      !m_highlightedBlocksText[block].contains(stageText))
+    m_highlightedBlocksText[block].push_back(stageText);
 
   // Check if we're already highlighting the block. If this is the case, do not
   // set an additional highlight on it.

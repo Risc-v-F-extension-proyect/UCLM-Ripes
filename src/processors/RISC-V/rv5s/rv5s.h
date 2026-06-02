@@ -6,6 +6,11 @@
 #include "VSRTL/core/vsrtl_logicgate.h"
 #include "VSRTL/core/vsrtl_multiplexer.h"
 
+#include <iostream>
+#include <optional>
+#include <unordered_map>
+#include <vector>
+
 #include "../../ripesvsrtlprocessor.h"
 
 // Functional units
@@ -17,6 +22,9 @@
 #include "processors/RISC-V/rv_ecallchecker.h"
 #include "processors/RISC-V/rv_falu.h"
 #include "processors/RISC-V/rv_falu_latency.h"
+
+#include "processors/RISC-V/rv_fp_functional_units.h"
+#include "processors/RISC-V/rv_fp_pipeline_helpers.h"
 #include "processors/RISC-V/rv_fregisterfile.h"
 #include "processors/RISC-V/rv_immediate.h"
 #include "processors/RISC-V/rv_memory.h"
@@ -57,6 +65,11 @@ public:
         RipesSettings::value(RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY).toUInt(),
         RipesSettings::value(RIPES_SETTING_RV5S_FALU_MUL_LATENCY).toUInt(),
         RipesSettings::value(RIPES_SETTING_RV5S_FALU_DIV_LATENCY).toUInt());
+    fp_units->setLatencies(
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_MUL_LATENCY).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_DIV_LATENCY).toUInt());
+    rebuildStructure();
 
     // -----------------------------------------------------------------------
     // Program counter
@@ -64,7 +77,9 @@ public:
     pc_inc->out >> pc_4->op2;
     pc_src->out >> pc_reg->in;
     0 >> pc_reg->clear;
-    hzunit->hazardFEEnable >> pc_reg->enable;
+    hzunit->hazardFEEnable >> *fe_enable_or->in[0];
+    fp_units->fe_issue_accepted >> *fe_enable_or->in[1];
+    fe_enable_or->out >> pc_reg->enable;
 
     2 >> pc_inc->get(PcInc::INC2);
     4 >> pc_inc->get(PcInc::INC4);
@@ -80,6 +95,10 @@ public:
 
     efsc_or->out >> *efschz_or->in[0];
     hzunit->hazardIDEXClear >> *efschz_or->in[1];
+    fp_units->issue_accepted >> *efschz_or->in[2];
+    fp_units->fe_issue_accepted >> *fp_id_issue_clear_and->in[0];
+    hzunit->hazardIDEXEnable >> *fp_id_issue_clear_and->in[1];
+    fp_id_issue_clear_and->out >> *efschz_or->in[3];
 
     // -----------------------------------------------------------------------
     // Instruction memory
@@ -121,7 +140,6 @@ public:
     decode->r2_reg_idx >> fRegisterFile->r2_addr;
     0 >> fRegisterFile->r3_addr;
     reg_wr_src->out >> fRegisterFile->data_in;
-
     memwb_reg->wr_reg_idx_out >> fRegisterFile->wr_addr;
     memwb_reg->fp_reg_do_write_out >> fRegisterFile->wr_en;
     fRegisterFile->setMemory(m_fRegMem);
@@ -219,7 +237,7 @@ public:
     pc_4->out >> ifid_reg->pc4_in;
     pc_reg->out >> ifid_reg->pc_in;
     uncompress->exp_instr >> ifid_reg->instr_in;
-    hzunit->hazardFEEnable >> ifid_reg->enable;
+    fe_enable_or->out >> ifid_reg->enable;
     efsc_or->out >> ifid_reg->clear;
     1 >> ifid_reg->valid_in; // Always valid unless register is cleared
 
@@ -258,7 +276,9 @@ public:
     decode->r2_reg_idx >> idex_reg->rd_reg2_idx_in;
     decode->opcode >> idex_reg->opcode_in;
     control->mem_do_read_ctrl >> idex_reg->mem_do_read_in;
-    control->fp_reg_do_write_ctrl >> idex_reg->fp_reg_do_write_in;
+    control->fp_reg_do_write_ctrl >> fp_reg_write_gate->fp_reg_do_write;
+    decode->opcode >> fp_reg_write_gate->opcode;
+    fp_reg_write_gate->out >> idex_reg->fp_reg_do_write_in;
     control->data_mem_wr_src_ctrl >> idex_reg->data_mem_wr_src_ctrl_in;
     control->falu_ctrl >> idex_reg->falu_ctrl_in;
 
@@ -267,31 +287,62 @@ public:
     // -----------------------------------------------------------------------
     // EX/MEM
     1 >> exmem_reg->enable;
-    hzunit->hazardEXMEMClear >> exmem_reg->clear;
+    hzunit->hazardEXMEMClear >> *exmem_clear_or->in[0];
+    0 >> *exmem_clear_or->in[1];
+    exmem_clear_or->out >> exmem_reg->clear;
+    fp_units->exmem_valid >> exmem_mux->use_fp;
+    fp_units->exmem_valid >> *fp_exmem_valid_not->in[0];
+    fp_exmem_valid_not->out >> *normal_exmem_stalled_and->in[0];
+    idex_reg->stalled_out >> *normal_exmem_stalled_and->in[1];
     hzunit->hazardEXMEMClear >> *mem_stalled_or->in[0];
-    idex_reg->stalled_out >> *mem_stalled_or->in[1];
+    0 >> *mem_stalled_or->in[1];
     mem_stalled_or->out >> exmem_reg->stalled_in;
 
     // Data
-    idex_reg->pc_out >> exmem_reg->pc_in;
-    idex_reg->pc4_out >> exmem_reg->pc4_in;
-    reg2_fw_src->out >> exmem_reg->r2_in;
-    alu->res >> exmem_reg->alures_in;
-    freg2_fw_src->out >> exmem_reg->f_r2_in;
-    falu->res >> exmem_reg->falures_in;
+    idex_reg->pc_out >> exmem_mux->pc;
+    idex_reg->pc4_out >> exmem_mux->pc4;
+    reg2_fw_src->out >> exmem_mux->r2;
+    alu->res >> exmem_mux->alures;
+    freg2_fw_src->out >> exmem_mux->f_r2;
+    falu->res >> exmem_mux->falures;
+    fp_units->exmem_pc >> exmem_mux->fp_pc;
+    fp_units->exmem_pc4 >> exmem_mux->fp_pc4;
+    fp_units->exmem_rd >> exmem_mux->fp_rd;
+    fp_units->exmem_value >> exmem_mux->fp_value;
+
+    exmem_mux->pc_out >> exmem_reg->pc_in;
+    exmem_mux->pc4_out >> exmem_reg->pc4_in;
+    exmem_mux->r2_out >> exmem_reg->r2_in;
+    exmem_mux->alures_out >> exmem_reg->alures_in;
+    exmem_mux->f_r2_out >> exmem_reg->f_r2_in;
+    exmem_mux->falures_out >> exmem_reg->falures_in;
 
     // Control
-    idex_reg->reg_wr_src_ctrl_out >> exmem_reg->reg_wr_src_ctrl_in;
-    idex_reg->wr_reg_idx_out >> exmem_reg->wr_reg_idx_in;
-    idex_reg->reg_do_write_out >> exmem_reg->reg_do_write_in;
-    idex_reg->mem_do_write_out >> exmem_reg->mem_do_write_in;
-    idex_reg->mem_do_read_out >> exmem_reg->mem_do_read_in;
-    idex_reg->mem_op_out >> exmem_reg->mem_op_in;
-    idex_reg->fp_reg_do_write_out >> exmem_reg->fp_reg_do_write_in;
-    idex_reg->data_mem_wr_src_ctrl_out >>
-        exmem_reg->data_mem_wr_src_ctrl_in;
+    idex_reg->reg_wr_src_ctrl_out >> exmem_mux->reg_wr_src_ctrl;
+    idex_reg->wr_reg_idx_out >> exmem_mux->wr_reg_idx;
+    idex_reg->reg_do_write_out >> exmem_mux->reg_do_write;
+    idex_reg->mem_do_write_out >> exmem_mux->mem_do_write;
+    idex_reg->mem_do_read_out >> exmem_mux->mem_do_read;
+    idex_reg->mem_op_out >> exmem_mux->mem_op;
+    idex_reg->fp_reg_do_write_out >> exmem_mux->fp_reg_do_write;
+    idex_reg->data_mem_wr_src_ctrl_out >> exmem_mux->data_mem_wr_src_ctrl;
+    fp_regular_issue_gate->out >> exmem_mux->valid;
+    fp_units->exmem_valid >> exmem_mux->fp_valid;
 
-    idex_reg->valid_out >> exmem_reg->valid_in;
+    exmem_mux->reg_wr_src_ctrl_out >> exmem_reg->reg_wr_src_ctrl_in;
+    exmem_mux->wr_reg_idx_out >> exmem_reg->wr_reg_idx_in;
+    exmem_mux->reg_do_write_out >> exmem_reg->reg_do_write_in;
+    exmem_mux->mem_do_write_out >> exmem_reg->mem_do_write_in;
+    exmem_mux->mem_do_read_out >> exmem_reg->mem_do_read_in;
+    exmem_mux->mem_op_out >> exmem_reg->mem_op_in;
+    exmem_mux->fp_reg_do_write_out >> exmem_reg->fp_reg_do_write_in;
+    exmem_mux->data_mem_wr_src_ctrl_out >>
+        exmem_reg->data_mem_wr_src_ctrl_in;
+    exmem_mux->valid_out >> exmem_reg->valid_in;
+
+    idex_reg->valid_out >> fp_regular_issue_gate->valid;
+    fp_units->normal_waw_stall >> fp_regular_issue_gate->blocked;
+    idex_reg->opcode_out >> fp_regular_issue_gate->opcode;
 
     // -----------------------------------------------------------------------
     // MEM/WB
@@ -344,7 +395,35 @@ public:
     memwb_reg->reg_do_write_out >> hzunit->wb_do_reg_write;
 
     idex_reg->opcode_out >> hzunit->opcode;
-    falu_latency->stall >> hzunit->falu_stall;
+    0 >> hzunit->falu_stall;
+    fp_units->stall >> hzunit->fp_unit_stall;
+    fp_units->busy >> hzunit->fp_unit_busy;
+    fp_units->normal_waw_stall >> hzunit->fp_normal_waw_stall;
+    fp_units->exmem_valid >> *fp_exmem_stall_and->in[0];
+    idex_reg->valid_out >> *fp_exmem_stall_and->in[1];
+    fp_exmem_stall_and->out >> hzunit->fp_exmem_stall;
+
+    // -----------------------------------------------------------------------
+    // Segmented FP functional units
+    decode->opcode >> fp_units->id_opcode;
+    decode->r1_reg_idx >> fp_units->id_rs1;
+    decode->r2_reg_idx >> fp_units->id_rs2;
+    decode->wr_reg_idx >> fp_units->id_rd;
+    ifid_reg->valid_out >> fp_units->id_valid;
+    idex_reg->opcode_out >> fp_units->ex_opcode;
+    idex_reg->wr_reg_idx_out >> fp_units->ex_rd;
+    idex_reg->valid_out >> fp_units->ex_valid;
+    memwb_reg->fp_reg_do_write_out >> fp_units->normal_wb_fp_write;
+    memwb_reg->pc_out >> fp_units->normal_wb_pc;
+    memwb_reg->wr_reg_idx_out >> fp_units->normal_wb_rd;
+    exmem_reg->valid_out >> fp_units->mem_forward_valid;
+    exmem_reg->fp_reg_do_write_out >> fp_units->mem_forward_fp_write;
+    exmem_reg->mem_do_read_out >> fp_units->mem_forward_is_load;
+    exmem_reg->pc_out >> fp_units->mem_forward_pc;
+    exmem_reg->wr_reg_idx_out >> fp_units->mem_forward_rd;
+    memwb_reg->valid_out >> fp_units->wb_forward_valid;
+    memwb_reg->fp_reg_do_write_out >> fp_units->wb_forward_fp_write;
+    memwb_reg->wr_reg_idx_out >> fp_units->wb_forward_rd;
   }
 
   // Design subcomponents
@@ -353,6 +432,7 @@ public:
   SUBCOMPONENT(alu, TYPE(ALU<XLEN>));
   SUBCOMPONENT(falu, TYPE(FALU<XLEN>));
   SUBCOMPONENT(falu_latency, FALULatency);
+  SUBCOMPONENT(fp_units, TYPE(FPFunctionalUnits<XLEN>));
   SUBCOMPONENT(control, Control);
   SUBCOMPONENT(immediate, TYPE(Immediate<XLEN>));
   SUBCOMPONENT(decode, TYPE(Decode<XLEN>));
@@ -373,6 +453,7 @@ public:
   // Multiplexers
   SUBCOMPONENT(reg_wr_src, TYPE(EnumMultiplexer<UnifiedRegWrSrc, XLEN>));
   SUBCOMPONENT(reg_wr_src_adapter, UnifiedRegWrSrcAdapter);
+  SUBCOMPONENT(exmem_mux, TYPE(FPExMemMux<XLEN>));
   SUBCOMPONENT(pc_src, TYPE(EnumMultiplexer<PcSrc, XLEN>));
   SUBCOMPONENT(alu_op1_src, TYPE(EnumMultiplexer<AluSrc1, XLEN>));
   SUBCOMPONENT(alu_op2_src, TYPE(EnumMultiplexer<AluSrc2, XLEN>));
@@ -390,6 +471,8 @@ public:
   // Forwarding & hazard detection units
   SUBCOMPONENT(funit, ForwardingUnit);
   SUBCOMPONENT(hzunit, HazardUnit);
+  SUBCOMPONENT(fp_reg_write_gate, FPSegmentedRegWriteGate);
+  SUBCOMPONENT(fp_regular_issue_gate, FPRegularIssueGate);
 
   // Gates
   // True if branch instruction and branch taken
@@ -399,9 +482,15 @@ public:
   // True if controlflow action or performing syscall finishing
   SUBCOMPONENT(efsc_or, TYPE(Or<1, 2>));
   // True if above or stalling due to load-use hazard
-  SUBCOMPONENT(efschz_or, TYPE(Or<1, 2>));
+  SUBCOMPONENT(efschz_or, TYPE(Or<1, 4>));
 
+  SUBCOMPONENT(fe_enable_or, TYPE(Or<1, 2>));
   SUBCOMPONENT(mem_stalled_or, TYPE(Or<1, 2>));
+  SUBCOMPONENT(exmem_clear_or, TYPE(Or<1, 2>));
+  SUBCOMPONENT(fp_exmem_stall_and, TYPE(And<1, 2>));
+  SUBCOMPONENT(fp_id_issue_clear_and, TYPE(And<1, 2>));
+  SUBCOMPONENT(fp_exmem_valid_not, TYPE(Not<1, 1>));
+  SUBCOMPONENT(normal_exmem_stalled_and, TYPE(And<1, 2>));
 
   // Address spaces
   ADDRESSSPACEMM(m_memory);
@@ -417,9 +506,27 @@ public:
         switch (idx.index()) {
             case IF: return pc_reg->out.uValue();
             case ID: return ifid_reg->pc_out.uValue();
-            case EX: return idex_reg->pc_out.uValue();
-            case MEM: return exmem_reg->pc_out.uValue();
-            case WB: return memwb_reg->pc_out.uValue();
+            case EX: {
+              if (idx.lane() > 0) {
+                const auto slot = fpSlotForLane(idx.lane());
+                if (!slot.valid) {
+                  return 0;
+                }
+                const auto view = fp_units->fpUnitView(slot.unit, slot.slot);
+                return view.pc;
+              }
+              return idex_reg->pc_out.uValue();
+            }
+            case MEM:
+              if (idx.lane() > 0) {
+                return 0;
+              }
+              return exmem_reg->pc_out.uValue();
+            case WB:
+              if (idx.lane() > 0) {
+                return 0;
+              }
+              return memwb_reg->pc_out.uValue();
             default: assert(false && "Processor does not contain stage");
         }
         Q_UNREACHABLE();
@@ -440,6 +547,38 @@ public:
     // clang-format on
   }
   StageInfo stageInfo(StageIndex stage) const override {
+    if (stage.lane() > 0) {
+      bool stageValid = stage.index() <= m_cycleCount;
+      AInt pc = 0;
+      QString namedState;
+      switch (stage.index()) {
+      case EX: {
+        const auto slot = fpSlotForLane(stage.lane());
+        if (slot.valid) {
+          const auto view = fp_units->fpUnitView(slot.unit, slot.slot);
+          if (view.valid) {
+            pc = view.pc;
+            namedState = QString::fromStdString(view.label);
+          } else {
+            stageValid = false;
+          }
+        } else {
+          stageValid = false;
+        }
+        break;
+      }
+      case MEM:
+      case WB:
+        stageValid = false;
+        break;
+      default:
+        stageValid = false;
+        break;
+      }
+      stageValid &= isExecutableAddress(pc);
+      return StageInfo({pc, stageValid, StageInfo::State::None, namedState});
+    }
+
     bool stageValid = true;
     // Has the pipeline stage been filled?
     stageValid &= stage.index() <= m_cycleCount;
@@ -448,9 +587,15 @@ public:
         // Has the stage been cleared?
         switch(stage.index()){
         case ID: stageValid &= ifid_reg->valid_out.uValue(); break;
-        case EX: stageValid &= idex_reg->valid_out.uValue(); break;
+        case EX:
+          stageValid &= idex_reg->valid_out.uValue() &&
+                        !isSegmentedFPInstr(
+                            idex_reg->opcode_out.eValue<RVInstr>());
+          break;
         case MEM: stageValid &= exmem_reg->valid_out.uValue(); break;
-        case WB: stageValid &= memwb_reg->valid_out.uValue(); break;
+        case WB:
+          stageValid &= memwb_reg->valid_out.uValue();
+          break;
         default: case IF: break;
         }
 
@@ -459,7 +604,9 @@ public:
         case ID: stageValid &= isExecutableAddress(ifid_reg->pc_out.uValue()); break;
         case EX: stageValid &= isExecutableAddress(idex_reg->pc_out.uValue()); break;
         case MEM: stageValid &= isExecutableAddress(exmem_reg->pc_out.uValue()); break;
-        case WB: stageValid &= isExecutableAddress(memwb_reg->pc_out.uValue()); break;
+        case WB:
+          stageValid &= isExecutableAddress(memwb_reg->pc_out.uValue());
+          break;
         default: case IF: stageValid &= isExecutableAddress(pc_reg->out.uValue()); break;
         }
 
@@ -485,7 +632,9 @@ public:
       if (stageValid) {
         namedState = fpEXStageName();
       }
-      if (idex_reg->stalled_out.uValue() == 1) {
+      if (idex_reg->stalled_out.uValue() == 1 &&
+          !isSegmentedFPInstr(idex_reg->opcode_out.eValue<RVInstr>()) &&
+          !fp_units->busy.uValue()) {
         state = StageInfo::State::Stalled;
       } else if (m_cycleCount > EX && idex_reg->valid_out.uValue() == 0) {
         state = StageInfo::State::Flushed;
@@ -559,7 +708,7 @@ public:
       if (!allStagesInvalid)
         break;
     }
-    return allStagesInvalid;
+    return allStagesInvalid && !fp_units->busy.uValue();
   }
 
   void setRegister(const std::string_view &regFile, unsigned i, VInt v) override {
@@ -571,14 +720,91 @@ public:
   }
 
   void clockProcessor() override {
+    fp_units->beginCycle();
+
     // An instruction has been retired if the instruction in the WB stage is
     // valid and the PC is within the executable range of the program
-    if (memwb_reg->valid_out.uValue() != 0 &&
-        isExecutableAddress(memwb_reg->pc_out.uValue())) {
+    const bool regularRetired =
+        memwb_reg->valid_out.uValue() != 0 &&
+        isExecutableAddress(memwb_reg->pc_out.uValue());
+    if (regularRetired) {
       m_instructionsRetired++;
     }
+    m_regularRetiredHistory.push_back(regularRetired);
+
+    const auto fpReadySequence = fp_units->readyExMemSequence();
+    const bool normalExMemCandidate =
+        fp_regular_issue_gate->out.uValue() &&
+        isExecutableAddress(idex_reg->pc_out.uValue());
+    const auto idexSequence = currentIDEXSequence();
+    const bool normalWinsExMem =
+        normalExMemCandidate && idexSequence && fpReadySequence &&
+        *idexSequence < *fpReadySequence;
+    const bool fpExMemAccepted =
+        fpReadySequence.has_value() && !hzunit->hazardEXMEMClear.uValue() &&
+        !normalWinsExMem;
+
+    if (fpExMemAccepted) {
+      fp_units->consumeExMem();
+    }
+
+    // Make the just-selected FP completion visible to the EX/MEM register
+    // inputs before Design::clock() snapshots registered values.
+    Design::propagate();
+
+    fp_units->advance();
+
+    // Advancing A/M/D may free A1/M1/D1. Re-propagate before checking whether
+    // the current ID instruction can enter a FP unit in this same cycle.
+    Design::propagate();
+
+    const bool fpIssueAccepted = !fp_units->exmem_valid.uValue();
+    const bool allowFPIDIssue = fp_units->id_issue_ready.uValue();
+
+    const auto fpIssue = makeFPIssue();
+    const auto fpIdIssue = allowFPIDIssue ? makeFPIDIssue() : FPIssue{};
+
+    if (fpIdIssue.valid) {
+      fp_units->insert(fpIdIssue.opcode, fpIdIssue.rd, fpIdIssue.rs1,
+                       fpIdIssue.rs2, fpIdIssue.op1Value, fpIdIssue.op2Value,
+                       fpIdIssue.pc, fpIdIssue.sequence, false);
+    } else if (fpIssueAccepted && fpIssue.valid) {
+      fp_units->insert(fpIssue.opcode, fpIssue.rd, fpIssue.rs1, fpIssue.rs2,
+                       fpIssue.op1Value, fpIssue.op2Value, fpIssue.pc,
+                       fpIssue.sequence);
+    }
+
+    // FP issue changes fe_issue_accepted/issue_accepted, which drive PC,
+    // IF/ID and ID/EX enables/clears. Propagate before the clock edge so the
+    // instruction cannot remain in the normal pipe and be issued again.
+    Design::propagate();
+
+    const bool ifidEnable = fe_enable_or->out.uValue();
+    const bool ifidClear = efsc_or->out.uValue();
+    const bool idexEnable = hzunit->hazardIDEXEnable.uValue();
+    const bool idexClear = efschz_or->out.uValue();
+    const bool exmemClear = exmem_clear_or->out.uValue();
+    const bool fpLatchedForExMem = fp_units->exmem_valid.uValue();
+    const auto fpLatchedSequence = fp_units->latchedExMemSequence();
+    const bool normalLatchedForExMem =
+        fp_regular_issue_gate->out.uValue() &&
+        isExecutableAddress(idex_reg->pc_out.uValue());
+    const bool fetchesExecutable =
+        isExecutableAddress(pc_reg->out.uValue());
+    const bool exmemWasValid = exmem_reg->valid_out.uValue();
+
+    savePipelineSequences();
 
     Design::clock();
+
+    advancePipelineSequences(ifidEnable, ifidClear, idexEnable, idexClear,
+                             exmemClear, fpLatchedForExMem,
+                             fpLatchedSequence, normalLatchedForExMem,
+                             fetchesExecutable, exmemWasValid);
+
+    debugDumpFpPipeline();
+
+    fp_units->clearExMemLatch();
   }
 
   void reverse() override {
@@ -589,16 +815,23 @@ public:
       m_syscallExitCycle = -1;
     }
     Design::reverse();
-    if (memwb_reg->valid_out.uValue() != 0 &&
-        isExecutableAddress(memwb_reg->pc_out.uValue())) {
-      m_instructionsRetired--;
+    fp_units->reverse();
+    reversePipelineSequences();
+    if (!m_regularRetiredHistory.empty()) {
+      if (m_regularRetiredHistory.back()) {
+        m_instructionsRetired--;
+      }
+      m_regularRetiredHistory.pop_back();
     }
   }
 
   void reset() override {
     ecallChecker->setSysCallExiting(false);
+    fp_units->reset();
     Design::reset();
     m_syscallExitCycle = -1;
+    m_regularRetiredHistory.clear();
+    resetPipelineSequences();
   }
 
   static ProcessorISAInfo supportsISA() { return RVISA::supportsISA<XLEN>(); }
@@ -620,7 +853,266 @@ public:
   }
 
 private:
+  struct PipelineSequenceSnapshot {
+    uint64_t nextInstructionSequence = 0;
+    std::optional<uint64_t> ifidSequence;
+    std::optional<uint64_t> idexSequence;
+    std::optional<uint64_t> exmemSequence;
+    std::optional<uint64_t> memwbSequence;
+    std::unordered_map<VSRTL_VT_U, uint64_t> latestSequenceForPc;
+  };
+
+  uint64_t nextFallbackSequence() const { return m_nextInstructionSequence; }
+
+  std::optional<uint64_t> sequenceForPc(VSRTL_VT_U pc) const {
+    const auto it = m_latestSequenceForPc.find(pc);
+    if (it == m_latestSequenceForPc.end()) {
+      return std::nullopt;
+    }
+    return it->second;
+  }
+
+  std::optional<uint64_t> currentIDEXSequence() const {
+    if (m_idexSequence) {
+      return m_idexSequence;
+    }
+    if (!idex_reg->valid_out.uValue()) {
+      return std::nullopt;
+    }
+    return sequenceForPc(idex_reg->pc_out.uValue());
+  }
+
+  void savePipelineSequences() {
+    m_pipelineSequenceHistory.push_back(
+        {m_nextInstructionSequence, m_ifidSequence, m_idexSequence,
+         m_exmemSequence, m_memwbSequence, m_latestSequenceForPc});
+  }
+
+  void reversePipelineSequences() {
+    if (m_pipelineSequenceHistory.empty()) {
+      return;
+    }
+    const auto snapshot = m_pipelineSequenceHistory.back();
+    m_nextInstructionSequence = snapshot.nextInstructionSequence;
+    m_ifidSequence = snapshot.ifidSequence;
+    m_idexSequence = snapshot.idexSequence;
+    m_exmemSequence = snapshot.exmemSequence;
+    m_memwbSequence = snapshot.memwbSequence;
+    m_latestSequenceForPc = snapshot.latestSequenceForPc;
+    m_pipelineSequenceHistory.pop_back();
+  }
+
+  void resetPipelineSequences() {
+    m_nextInstructionSequence = 0;
+    m_ifidSequence.reset();
+    m_idexSequence.reset();
+    m_exmemSequence.reset();
+    m_memwbSequence.reset();
+    m_latestSequenceForPc.clear();
+    m_pipelineSequenceHistory.clear();
+  }
+
+  void advancePipelineSequences(
+      bool ifidEnable, bool ifidClear, bool idexEnable, bool idexClear,
+      bool exmemClear, bool fpLatchedForExMem,
+      std::optional<uint64_t> fpLatchedSequence, bool normalLatchedForExMem,
+      bool fetchesExecutable, bool exmemWasValid) {
+    const auto oldIfidSequence = m_ifidSequence;
+    const auto oldIdexSequence = m_idexSequence;
+    const auto oldExmemSequence = m_exmemSequence;
+
+    m_memwbSequence = exmemWasValid ? oldExmemSequence : std::nullopt;
+
+    if (exmemClear) {
+      m_exmemSequence.reset();
+    } else if (fpLatchedForExMem) {
+      m_exmemSequence = fpLatchedSequence;
+    } else if (normalLatchedForExMem) {
+      m_exmemSequence = oldIdexSequence;
+    } else {
+      m_exmemSequence.reset();
+    }
+
+    if (idexClear) {
+      m_idexSequence.reset();
+    } else if (idexEnable) {
+      m_idexSequence = oldIfidSequence;
+    }
+
+    if (ifidClear) {
+      m_ifidSequence.reset();
+    } else if (ifidEnable) {
+      if (fetchesExecutable) {
+        const auto sequence = m_nextInstructionSequence++;
+        m_ifidSequence = sequence;
+        m_latestSequenceForPc[pc_reg->out.uValue()] = sequence;
+      } else {
+        m_ifidSequence.reset();
+      }
+    }
+  }
+
+  void debugDumpFpPipeline() const {
+    std::cerr << "[fp-pipe] cycle=" << m_cycleCount
+              << " fp_ready=" << fp_units->hasReadyExMemEntry()
+              << " fp_exmem_valid=" << fp_units->exmem_valid.uValue()
+              << " id_issue_ready=" << fp_units->id_issue_ready.uValue()
+              << '\n';
+
+    std::cerr << "    IFID pc=0x" << std::hex << ifid_reg->pc_out.uValue()
+              << std::dec << " valid=" << ifid_reg->valid_out.uValue()
+              << '\n';
+    std::cerr << "    IDEX pc=0x" << std::hex << idex_reg->pc_out.uValue()
+              << std::dec << " valid=" << idex_reg->valid_out.uValue()
+              << " stalled=" << idex_reg->stalled_out.uValue()
+              << " rd=" << idex_reg->wr_reg_idx_out.uValue() << '\n';
+    std::cerr << "    EXMEM pc=0x" << std::hex << exmem_reg->pc_out.uValue()
+              << std::dec << " valid=" << exmem_reg->valid_out.uValue()
+              << " stalled=" << exmem_reg->stalled_out.uValue()
+              << " rd=" << exmem_reg->wr_reg_idx_out.uValue()
+              << " fp_wr=" << exmem_reg->fp_reg_do_write_out.uValue()
+              << '\n';
+    std::cerr << "    MEMWB pc=0x" << std::hex << memwb_reg->pc_out.uValue()
+              << std::dec << " valid=" << memwb_reg->valid_out.uValue()
+              << " stalled=" << memwb_reg->stalled_out.uValue()
+              << " rd=" << memwb_reg->wr_reg_idx_out.uValue()
+              << " fp_wr=" << memwb_reg->fp_reg_do_write_out.uValue()
+              << '\n';
+    fp_units->debugDump(std::cerr);
+  }
+
+  struct FPSlotLane {
+    bool valid = false;
+    unsigned unit = 0;
+    unsigned slot = 0;
+  };
+
+  unsigned fpAddFirstLane() const { return 1; }
+  unsigned fpMulFirstLane() const { return fpAddFirstLane() + m_fpAddLanes; }
+  unsigned fpDivFirstLane() const { return fpMulFirstLane() + m_fpMulLanes; }
+  unsigned fpLaneCount() const {
+    return m_fpAddLanes + m_fpMulLanes + m_fpDivLanes;
+  }
+
+  FPSlotLane fpSlotForLane(unsigned lane) const {
+    if (lane >= fpAddFirstLane() && lane < fpMulFirstLane()) {
+      return {true, FPFunctionalUnits<XLEN>::unitIndexForOpcode(RVInstr::FADD),
+              lane - fpAddFirstLane()};
+    }
+    if (lane >= fpMulFirstLane() && lane < fpDivFirstLane()) {
+      return {true, FPFunctionalUnits<XLEN>::unitIndexForOpcode(RVInstr::FMUL),
+              lane - fpMulFirstLane()};
+    }
+    if (lane >= fpDivFirstLane() &&
+        lane < fpDivFirstLane() + m_fpDivLanes) {
+      return {true, FPFunctionalUnits<XLEN>::unitIndexForOpcode(RVInstr::FDIV),
+              lane - fpDivFirstLane()};
+    }
+    return {};
+  }
+
+  void rebuildStructure() {
+    m_fpAddLanes = std::max(
+        1u, RipesSettings::value(RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY)
+                .toUInt());
+    m_fpMulLanes = std::max(
+        1u, RipesSettings::value(RIPES_SETTING_RV5S_FALU_MUL_LATENCY).toUInt());
+    m_fpDivLanes = std::max(
+        1u, RipesSettings::value(RIPES_SETTING_RV5S_FALU_DIV_LATENCY).toUInt());
+
+    m_structure.clear();
+    m_structure[0] = 5;
+    for (unsigned lane = 1; lane <= fpLaneCount(); ++lane) {
+      m_structure[lane] = 5;
+    }
+  }
+
+  struct FPIssue {
+    bool valid = false;
+    RVInstr opcode = RVInstr::NOP;
+    unsigned rd = 0;
+    unsigned rs1 = 0;
+    unsigned rs2 = 0;
+    VSRTL_VT_U op1Value = 0;
+    VSRTL_VT_U op2Value = 0;
+    VSRTL_VT_U pc = 0;
+    uint64_t sequence = 0;
+  };
+
+  VSRTL_VT_U fpOperandValue(unsigned reg) const {
+    if (fp_units->exmem_valid.uValue() &&
+        fp_units->exmem_rd.uValue() == reg) {
+      return fp_units->exmem_value.uValue();
+    }
+    if (exmem_reg->valid_out.uValue() &&
+        exmem_reg->fp_reg_do_write_out.uValue() &&
+        exmem_reg->wr_reg_idx_out.uValue() == reg) {
+      if (exmem_reg->mem_do_read_out.uValue()) {
+        return data_mem->data_out.uValue();
+      }
+      return exmem_reg->falures_out.uValue();
+    }
+    if (memwb_reg->valid_out.uValue() &&
+        memwb_reg->fp_reg_do_write_out.uValue() &&
+        memwb_reg->wr_reg_idx_out.uValue() == reg) {
+      return reg_wr_src->out.uValue();
+    }
+    return fRegisterFile->getRegister(reg);
+  }
+
+  FPIssue makeFPIssue() const {
+    const auto opcode = idex_reg->opcode_out.eValue<RVInstr>();
+    if (!idex_reg->valid_out.uValue() || !isSegmentedFPInstr(opcode) ||
+        !isExecutableAddress(idex_reg->pc_out.uValue()) ||
+        fp_units->containsPc(idex_reg->pc_out.uValue())) {
+      return {};
+    }
+
+    const auto rs1 = static_cast<unsigned>(idex_reg->rd_reg1_idx_out.uValue());
+    const auto rs2 = static_cast<unsigned>(idex_reg->rd_reg2_idx_out.uValue());
+    return {true,
+            opcode,
+            static_cast<unsigned>(idex_reg->wr_reg_idx_out.uValue()),
+            rs1,
+            rs2,
+            fpOperandValue(rs1),
+            fpOperandValue(rs2),
+            idex_reg->pc_out.uValue(),
+            currentIDEXSequence().value_or(nextFallbackSequence())};
+  }
+
+  FPIssue makeFPIDIssue() const {
+    const auto opcode = decode->opcode.eValue<RVInstr>();
+    if (!ifid_reg->valid_out.uValue() || !isSegmentedFPInstr(opcode) ||
+        !isExecutableAddress(ifid_reg->pc_out.uValue()) ||
+        fp_units->containsPc(ifid_reg->pc_out.uValue())) {
+      return {};
+    }
+
+    const auto rs1 = static_cast<unsigned>(decode->r1_reg_idx.uValue());
+    const auto rs2 = static_cast<unsigned>(decode->r2_reg_idx.uValue());
+    if (!fp_units->canIssueNow(opcode, rs1, rs2)) {
+      return {};
+    }
+
+    return {true,
+            opcode,
+            static_cast<unsigned>(decode->wr_reg_idx.uValue()),
+            rs1,
+            rs2,
+            fpOperandValue(rs1),
+            fpOperandValue(rs2),
+            ifid_reg->pc_out.uValue(),
+            m_ifidSequence.value_or(
+                sequenceForPc(ifid_reg->pc_out.uValue())
+                    .value_or(nextFallbackSequence()))};
+  }
+
   QString fpEXStageName() const {
+    if (isSegmentedFPInstr(idex_reg->opcode_out.eValue<RVInstr>())) {
+      return "";
+    }
+
     const unsigned cycle = falu_latency->current_cycle.uValue();
     if (cycle == 0) {
       return "";
@@ -646,8 +1138,19 @@ private:
    * during rewinding.
    */
   long long m_syscallExitCycle = -1;
+  std::vector<bool> m_regularRetiredHistory;
+  uint64_t m_nextInstructionSequence = 0;
+  std::optional<uint64_t> m_ifidSequence;
+  std::optional<uint64_t> m_idexSequence;
+  std::optional<uint64_t> m_exmemSequence;
+  std::optional<uint64_t> m_memwbSequence;
+  std::unordered_map<VSRTL_VT_U, uint64_t> m_latestSequenceForPc;
+  std::vector<PipelineSequenceSnapshot> m_pipelineSequenceHistory;
   std::shared_ptr<ISAInfoBase> m_enabledISA;
-  ProcessorStructure m_structure = {{0, 5}};
+  unsigned m_fpAddLanes = 4;
+  unsigned m_fpMulLanes = 7;
+  unsigned m_fpDivLanes = 25;
+  ProcessorStructure m_structure;
 };
 
 } // namespace core

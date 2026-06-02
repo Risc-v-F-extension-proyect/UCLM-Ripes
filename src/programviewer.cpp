@@ -113,9 +113,9 @@ void ProgramViewer::updateHighlightedAddresses() {
         continue;
 
       // Record the stage name for the highlighted block for later painting
-      QString stageString = ProcessorHandler::getProcessor()->stageName(sid);
-      if (!stageInfo.namedState.isEmpty())
-        stageString += " (" + stageInfo.namedState + ")";
+      QString stageString = stageInfo.namedState.isEmpty()
+                                ? ProcessorHandler::getProcessor()->stageName(sid)
+                                : stageInfo.namedState;
       highlightBlock(block, colorGenerator(), stageString);
     }
   }
