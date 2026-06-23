@@ -20,11 +20,13 @@ public:
     CONNECT_REGISTERED_CLEN_INPUT(pc, clear, enable);
     CONNECT_REGISTERED_CLEN_INPUT(instr, clear, enable);
     CONNECT_REGISTERED_CLEN_INPUT(valid, clear, enable);
+    CONNECT_REGISTERED_CLEN_INPUT(instr_tag, clear, enable);
   }
 
   REGISTERED_CLEN_INPUT(pc4, XLEN);
   REGISTERED_CLEN_INPUT(instr, c_RVInstrWidth);
   REGISTERED_CLEN_INPUT(pc, XLEN);
+  REGISTERED_CLEN_INPUT(instr_tag, XLEN);
 
   // Register controls
   INPUTPORT(enable, 1);

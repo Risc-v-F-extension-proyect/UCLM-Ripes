@@ -29,6 +29,7 @@ public:
 
     CONNECT_REGISTERED_CLEN_INPUT(f_r1, this->clear, this->enable);
     CONNECT_REGISTERED_CLEN_INPUT(f_r2, this->clear, this->enable);
+    CONNECT_REGISTERED_CLEN_INPUT(instr_tag, this->clear, this->enable);
     CONNECT_REGISTERED_CLEN_INPUT(fp_reg_do_write, this->clear, this->enable);
     CONNECT_REGISTERED_CLEN_INPUT(data_mem_wr_src_ctrl, this->clear,this->enable);
     CONNECT_REGISTERED_CLEN_INPUT(falu_ctrl, this->clear, this->enable);
@@ -40,6 +41,7 @@ public:
 
   REGISTERED_CLEN_INPUT(f_r1, XLEN);
   REGISTERED_CLEN_INPUT(f_r2, XLEN);
+  REGISTERED_CLEN_INPUT(instr_tag, XLEN);
 
   REGISTERED_CLEN_INPUT(rd_reg1_idx, c_RVRegsBits);
   REGISTERED_CLEN_INPUT(rd_reg2_idx, c_RVRegsBits);
