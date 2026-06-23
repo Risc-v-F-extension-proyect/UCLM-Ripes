@@ -412,6 +412,11 @@ public:
     idii_reg->valid_out >> iiex_reg->valid_in;
     idii_reg->data_valid_out >> iiex_reg->data_valid_in;
     idii_reg->exec_valid_out >> iiex_reg->exec_valid_in;
+    0 >> iiex_reg->f_r1_in;
+    0 >> iiex_reg->f_r2_in;
+    0 >> iiex_reg->fp_reg_do_write_in;
+    0 >> iiex_reg->data_mem_wr_src_ctrl_in;
+    0 >> iiex_reg->falu_ctrl_in;
 
     // -----------------------------------------------------------------------
     // EX/MEM
@@ -447,6 +452,10 @@ public:
     iiex_reg->valid_out >> exmem_reg->valid_in;
     iiex_reg->data_valid_out >> exmem_reg->data_valid_in;
     iiex_reg->exec_valid_out >> exmem_reg->exec_valid_in;
+    0 >> exmem_reg->f_r2_in;
+    0 >> exmem_reg->falures_in;
+    0 >> exmem_reg->fp_reg_do_write_in;
+    0 >> exmem_reg->data_mem_wr_src_ctrl_in;
 
     // -----------------------------------------------------------------------
     // MEM/WB
@@ -482,6 +491,8 @@ public:
     exmem_reg->valid_out >> memwb_reg->valid_in;
     exmem_reg->data_valid_out >> memwb_reg->data_valid_in;
     exmem_reg->exec_valid_out >> memwb_reg->exec_valid_in;
+    0 >> memwb_reg->falures_in;
+    0 >> memwb_reg->fp_reg_do_write_in;
 
     // -----------------------------------------------------------------------
     // Forwarding unit

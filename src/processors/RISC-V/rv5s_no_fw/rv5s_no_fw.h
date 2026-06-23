@@ -215,6 +215,10 @@ public:
     idex_reg->mem_op_out >> exmem_reg->mem_op_in;
 
     idex_reg->valid_out >> exmem_reg->valid_in;
+    0 >> exmem_reg->f_r2_in;
+    0 >> exmem_reg->falures_in;
+    0 >> exmem_reg->fp_reg_do_write_in;
+    0 >> exmem_reg->data_mem_wr_src_ctrl_in;
 
     // -----------------------------------------------------------------------
     // MEM/WB
@@ -233,6 +237,8 @@ public:
     exmem_reg->reg_do_write_out >> memwb_reg->reg_do_write_in;
 
     exmem_reg->valid_out >> memwb_reg->valid_in;
+    0 >> memwb_reg->falures_in;
+    0 >> memwb_reg->fp_reg_do_write_in;
 
     // -----------------------------------------------------------------------
     // Hazard detection unit

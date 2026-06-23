@@ -199,6 +199,11 @@ public:
     decode->opcode >> idex_reg->opcode_in;
 
     ifid_reg->valid_out >> idex_reg->valid_in;
+    0 >> idex_reg->f_r1_in;
+    0 >> idex_reg->f_r2_in;
+    0 >> idex_reg->fp_reg_do_write_in;
+    0 >> idex_reg->data_mem_wr_src_ctrl_in;
+    0 >> idex_reg->falu_ctrl_in;
 
     // -----------------------------------------------------------------------
     // EX/MEM
@@ -247,6 +252,8 @@ public:
 
     memwb_reg->wr_reg_idx_out >> funit->wb_reg_wr_idx;
     memwb_reg->reg_do_write_out >> funit->wb_reg_wr_en;
+    0 >> funit->mem_fp_reg_wr_en;
+    0 >> funit->wb_fp_reg_wr_en;
   }
 
   // Design subcomponents

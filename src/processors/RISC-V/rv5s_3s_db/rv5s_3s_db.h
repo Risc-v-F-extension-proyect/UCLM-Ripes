@@ -226,6 +226,11 @@ public:
     decode->r2_reg_idx >> idex_reg->rd_reg2_idx_in;
     decode->opcode >> idex_reg->opcode_in;
     control->mem_do_read_ctrl >> idex_reg->mem_do_read_in;
+    0 >> idex_reg->f_r1_in;
+    0 >> idex_reg->f_r2_in;
+    0 >> idex_reg->fp_reg_do_write_in;
+    0 >> idex_reg->data_mem_wr_src_ctrl_in;
+    0 >> idex_reg->falu_ctrl_in;
 
     ifid_reg->valid_out >> idex_reg->valid_in;
 
@@ -252,6 +257,10 @@ public:
     idex_reg->mem_op_out >> exmem_reg->mem_op_in;
 
     idex_reg->valid_out >> exmem_reg->valid_in;
+    0 >> exmem_reg->f_r2_in;
+    0 >> exmem_reg->falures_in;
+    0 >> exmem_reg->fp_reg_do_write_in;
+    0 >> exmem_reg->data_mem_wr_src_ctrl_in;
 
     controlflow_or->out >> exmem_reg->do_branch_in; // MODIFIED
 
@@ -277,6 +286,8 @@ public:
     exmem_reg->reg_do_write_out >> memwb_reg->reg_do_write_in;
 
     exmem_reg->valid_out >> memwb_reg->valid_in;
+    0 >> memwb_reg->falures_in;
+    0 >> memwb_reg->fp_reg_do_write_in;
 
     // -----------------------------------------------------------------------
     // Forwarding unit
@@ -288,14 +299,19 @@ public:
 
     memwb_reg->wr_reg_idx_out >> funit->wb_reg_wr_idx;
     memwb_reg->reg_do_write_out >> funit->wb_reg_wr_en;
+    0 >> funit->mem_fp_reg_wr_en;
+    0 >> funit->wb_fp_reg_wr_en;
 
     // -----------------------------------------------------------------------
     // Hazard detection unit
     decode->r1_reg_idx >> hzunit->id_reg1_idx;
     decode->r2_reg_idx >> hzunit->id_reg2_idx;
+    decode->opcode >> hzunit->id_opcode;
 
     idex_reg->mem_do_read_out >> hzunit->ex_do_mem_read_en;
     idex_reg->wr_reg_idx_out >> hzunit->ex_reg_wr_idx;
+    0 >> hzunit->ex_do_reg_write_en;
+    0 >> hzunit->ex_do_fp_write_en;
 
     exmem_reg->reg_do_write_out >> hzunit->mem_do_reg_write;
 
