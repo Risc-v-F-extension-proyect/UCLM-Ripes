@@ -16,17 +16,17 @@
 #include "processors/RISC-V/rv_decode.h"
 #include "processors/RISC-V/rv_ecallchecker.h"
 #include "processors/RISC-V/rv_falu.h"
-#include "processors/RISC-V/rv_falu_latency.h"
 #include "processors/RISC-V/rv_fregisterfile.h"
 #include "processors/RISC-V/rv_immediate.h"
 #include "processors/RISC-V/rv_memory.h"
 #include "processors/RISC-V/rv_registerfile.h"
 #include "processors/RISC-V/rv_uncompress.h"
 #include "processors/RISC-V/rv_unified_reg_wr_src_adapter.h"
-#include "ripessettings.h"
-
+#include "rv_instruction_tag_generator.h"
 // Stage separating registers
 #include "../rv5s_no_fw_hz/rv5s_no_fw_hz_ifid.h"
+#include "rv_pending_instruction_window.h"
+
 #include "rv5s_exmem.h"
 #include "rv5s_idex.h"
 #include "rv5s_memwb.h"
@@ -34,6 +34,8 @@
 // Forwarding & Hazard detection unit
 #include "rv5s_forwardingunit.h"
 #include "rv5s_hazardunit.h"
+
+#include <iostream>
 
 namespace vsrtl {
 namespace core {
@@ -53,10 +55,6 @@ public:
     m_enabledISA = ISAInfoRegistry::getISA<XLenToRVISA<XLEN>()>(extensions);
     decode->setISA(m_enabledISA);
     uncompress->setISA(m_enabledISA);
-    falu_latency->setLatencies(
-        RipesSettings::value(RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY).toUInt(),
-        RipesSettings::value(RIPES_SETTING_RV5S_FALU_MUL_LATENCY).toUInt(),
-        RipesSettings::value(RIPES_SETTING_RV5S_FALU_DIV_LATENCY).toUInt());
 
     // -----------------------------------------------------------------------
     // Program counter
@@ -64,7 +62,8 @@ public:
     pc_inc->out >> pc_4->op2;
     pc_src->out >> pc_reg->in;
     0 >> pc_reg->clear;
-    hzunit->hazardFEEnable >> pc_reg->enable;
+    fe_window_enable_and->out >> pc_reg->enable;
+    fe_window_enable_and->out >> instruction_tag_generator->enable_in;
 
     2 >> pc_inc->get(PcInc::INC2);
     4 >> pc_inc->get(PcInc::INC4);
@@ -73,9 +72,9 @@ public:
     // Note: pc_src works uses the PcSrc enum, but is selected by the boolean
     // signal from the controlflow OR gate. PcSrc enum values must adhere to the
     // boolean 0/1 values.
-    controlflow_or->out >> pc_src->select;
+    pending_instruction_window->controlflow_out >> pc_src->select;
 
-    controlflow_or->out >> *efsc_or->in[0];
+    pending_instruction_window->controlflow_out >> *efsc_or->in[0];
     ecallChecker->syscallExit >> *efsc_or->in[1];
 
     efsc_or->out >> *efschz_or->in[0];
@@ -85,6 +84,10 @@ public:
     // Instruction memory
     pc_reg->out >> instr_mem->addr;
     instr_mem->setMemory(m_memory);
+
+    // -----------------------------------------------------------------------
+    // Instruction tag
+    instruction_tag_generator->instr_tag >> ifid_reg-> instr_tag_in;
 
     // -----------------------------------------------------------------------
     // Decode
@@ -133,13 +136,18 @@ public:
     reg1_fw_src->out >> branch->op1;
     reg2_fw_src->out >> branch->op2;
 
+    branch->res >> pending_instruction_window->branch_res_in;
+    idex_reg->do_br_out >> pending_instruction_window->do_br_in;
+    idex_reg->do_jmp_out >> pending_instruction_window->do_jmp_in;
     branch->res >> *br_and->in[0];
     idex_reg->do_br_out >> *br_and->in[1];
+    br_and->out >> pending_instruction_window->branch_taken_in;
     br_and->out >> *controlflow_or->in[0];
     idex_reg->do_jmp_out >> *controlflow_or->in[1];
+    controlflow_or->out >> pending_instruction_window->controlflow_in;
 
     pc_4->out >> pc_src->get(PcSrc::PC4);
-    alu->res >> pc_src->get(PcSrc::ALU);
+    pending_instruction_window->alures_out >> pc_src->get(PcSrc::ALU);
 
     // -----------------------------------------------------------------------
     // ALU
@@ -189,12 +197,6 @@ public:
     freg2_fw_src->out >> falu->op2;
     0 >> falu->op3;
     idex_reg->falu_ctrl_out >> falu->ctrl;
-    idex_reg->opcode_out >> falu_latency->opcode;
-    idex_reg->valid_out >> falu_latency->valid;
-    falu_latency_remaining_reg->out >> falu_latency->remaining;
-    falu_latency->next_remaining >> falu_latency_remaining_reg->in;
-    1 >> falu_latency_remaining_reg->enable;
-    efschz_or->out >> falu_latency_remaining_reg->clear;
 
     // -----------------------------------------------------------------------
     // Data memory
@@ -210,16 +212,33 @@ public:
     // -----------------------------------------------------------------------
     // Ecall checker
 
-    idex_reg->opcode_out >> ecallChecker->opcode;
+    //before
+    //idex_reg->opcode_out >> ecallChecker->opcode;
+    //ecallChecker->setSyscallCallback(&trapHandler);
+    //hzunit->stallEcallHandling >> ecallChecker->stallEcallHandling;
+    //now
+    idex_reg->opcode_out >> pending_instruction_window->opcode_in;
+    hzunit->stallEcallHandling >> pending_instruction_window->stallEcallHandling_in;
+    pending_instruction_window->opcode_out >> ecallChecker->opcode;
     ecallChecker->setSyscallCallback(&trapHandler);
-    hzunit->stallEcallHandling >> ecallChecker->stallEcallHandling;
+    pending_instruction_window->stallEcallHandling_out >> ecallChecker->stallEcallHandling;
+
+    // -----------------------------------------------------------------------
+    // Hazard unit communication with Pending Instruction Window
+    decode->r1_reg_idx >> pending_instruction_window->id_reg1_idx_in;
+    decode->r2_reg_idx >> pending_instruction_window->id_reg2_idx_in;
+    decode->opcode >> pending_instruction_window->id_opcode_in;
+    hzunit->hazardFEEnable >> *fe_window_enable_and->in[0];
+    pending_instruction_window->stallNeeded_out >> *fe_window_enable_and->in[1];
+    hzunit->hazardIDEXEnable >> *idex_window_enable_and->in[0];
+    pending_instruction_window->stallNeeded_out >> *idex_window_enable_and->in[1];
 
     // -----------------------------------------------------------------------
     // IF/ID
     pc_4->out >> ifid_reg->pc4_in;
     pc_reg->out >> ifid_reg->pc_in;
     uncompress->exp_instr >> ifid_reg->instr_in;
-    hzunit->hazardFEEnable >> ifid_reg->enable;
+    fe_window_enable_and->out >> ifid_reg->enable;
     efsc_or->out >> ifid_reg->clear;
     1 >> ifid_reg->valid_in; // Always valid unless register is cleared
 
@@ -229,7 +248,7 @@ public:
 
     // -----------------------------------------------------------------------
     // ID/EX
-    hzunit->hazardIDEXEnable >> idex_reg->enable;
+    idex_window_enable_and->out >> idex_reg->enable;
     hzunit->hazardIDEXClear >> idex_reg->stalled_in;
     efschz_or->out >> idex_reg->clear;
 
@@ -241,6 +260,7 @@ public:
     fRegisterFile->r1_out >> idex_reg->f_r1_in;
     fRegisterFile->r2_out >> idex_reg->f_r2_in;
     immediate->imm >> idex_reg->imm_in;
+    ifid_reg->instr_tag_out >> idex_reg->instr_tag_in;
 
     // Control
     decode->wr_reg_idx >> idex_reg->wr_reg_idx_in;
@@ -266,32 +286,61 @@ public:
 
     // -----------------------------------------------------------------------
     // EX/MEM
-    1 >> exmem_reg->enable;
-    hzunit->hazardEXMEMClear >> exmem_reg->clear;
+    1 >> pending_instruction_window->enable_in;
+    hzunit->hazardEXMEMClear >> pending_instruction_window->clear_in;
     hzunit->hazardEXMEMClear >> *mem_stalled_or->in[0];
     idex_reg->stalled_out >> *mem_stalled_or->in[1];
-    mem_stalled_or->out >> exmem_reg->stalled_in;
+    mem_stalled_or->out >> pending_instruction_window->stalled_in;
 
     // Data
-    idex_reg->pc_out >> exmem_reg->pc_in;
-    idex_reg->pc4_out >> exmem_reg->pc4_in;
-    reg2_fw_src->out >> exmem_reg->r2_in;
-    alu->res >> exmem_reg->alures_in;
-    freg2_fw_src->out >> exmem_reg->f_r2_in;
-    falu->res >> exmem_reg->falures_in;
+    idex_reg->pc_out >> pending_instruction_window->pc_in;
+    idex_reg->pc4_out >> pending_instruction_window->pc4_in;
+    idex_reg->instr_tag_out >> pending_instruction_window->instr_tag_in;
+    reg2_fw_src->out >> pending_instruction_window->r2_in;
+    alu->res >> pending_instruction_window->alures_in;
+    freg2_fw_src->out >> pending_instruction_window->f_r2_in;
+    falu->res >> pending_instruction_window->falures_in;
+
 
     // Control
-    idex_reg->reg_wr_src_ctrl_out >> exmem_reg->reg_wr_src_ctrl_in;
-    idex_reg->wr_reg_idx_out >> exmem_reg->wr_reg_idx_in;
-    idex_reg->reg_do_write_out >> exmem_reg->reg_do_write_in;
-    idex_reg->mem_do_write_out >> exmem_reg->mem_do_write_in;
-    idex_reg->mem_do_read_out >> exmem_reg->mem_do_read_in;
-    idex_reg->mem_op_out >> exmem_reg->mem_op_in;
-    idex_reg->fp_reg_do_write_out >> exmem_reg->fp_reg_do_write_in;
+    idex_reg->reg_wr_src_ctrl_out >>
+        pending_instruction_window->reg_wr_src_ctrl_in;
+    idex_reg->wr_reg_idx_out >> pending_instruction_window->wr_reg_idx_in;
+    idex_reg->reg_do_write_out >>
+        pending_instruction_window->reg_do_write_in;
+    idex_reg->mem_do_write_out >>
+        pending_instruction_window->mem_do_write_in;
+    idex_reg->mem_do_read_out >> pending_instruction_window->mem_do_read_in;
+    idex_reg->mem_op_out >> pending_instruction_window->mem_op_in;
+    idex_reg->fp_reg_do_write_out >>
+        pending_instruction_window->fp_reg_do_write_in;
     idex_reg->data_mem_wr_src_ctrl_out >>
-        exmem_reg->data_mem_wr_src_ctrl_in;
+        pending_instruction_window->data_mem_wr_src_ctrl_in;
+    idex_reg->falu_ctrl_out >> pending_instruction_window->falu_ctrl_in;
+    idex_reg->valid_out >> pending_instruction_window->valid_in;
 
-    idex_reg->valid_out >> exmem_reg->valid_in;
+    pending_instruction_window->enable_out >> exmem_reg->enable;
+    pending_instruction_window->clear_out >> exmem_reg->clear;
+    pending_instruction_window->stalled_out >> exmem_reg->stalled_in;
+    pending_instruction_window->pc_out >> exmem_reg->pc_in;
+    pending_instruction_window->pc4_out >> exmem_reg->pc4_in;
+    pending_instruction_window->r2_out >> exmem_reg->r2_in;
+    pending_instruction_window->alures_out >> exmem_reg->alures_in;
+    pending_instruction_window->f_r2_out >> exmem_reg->f_r2_in;
+    pending_instruction_window->falures_out >> exmem_reg->falures_in;
+    pending_instruction_window->reg_wr_src_ctrl_out >>
+        exmem_reg->reg_wr_src_ctrl_in;
+    pending_instruction_window->wr_reg_idx_out >> exmem_reg->wr_reg_idx_in;
+    pending_instruction_window->reg_do_write_out >> exmem_reg->reg_do_write_in;
+    pending_instruction_window->mem_do_write_out >>
+        exmem_reg->mem_do_write_in;
+    pending_instruction_window->mem_do_read_out >> exmem_reg->mem_do_read_in;
+    pending_instruction_window->mem_op_out >> exmem_reg->mem_op_in;
+    pending_instruction_window->fp_reg_do_write_out >>
+        exmem_reg->fp_reg_do_write_in;
+    pending_instruction_window->data_mem_wr_src_ctrl_out >>
+        exmem_reg->data_mem_wr_src_ctrl_in;
+    pending_instruction_window->valid_out >> exmem_reg->valid_in;
 
     // -----------------------------------------------------------------------
     // MEM/WB
@@ -344,7 +393,7 @@ public:
     memwb_reg->reg_do_write_out >> hzunit->wb_do_reg_write;
 
     idex_reg->opcode_out >> hzunit->opcode;
-    falu_latency->stall >> hzunit->falu_stall;
+    0 >> hzunit->falu_stall;
   }
 
   // Design subcomponents
@@ -352,7 +401,6 @@ public:
   SUBCOMPONENT(fRegisterFile, TYPE(FRegisterFile<XLEN, true>));
   SUBCOMPONENT(alu, TYPE(ALU<XLEN>));
   SUBCOMPONENT(falu, TYPE(FALU<XLEN>));
-  SUBCOMPONENT(falu_latency, FALULatency);
   SUBCOMPONENT(control, Control);
   SUBCOMPONENT(immediate, TYPE(Immediate<XLEN>));
   SUBCOMPONENT(decode, TYPE(Decode<XLEN>));
@@ -362,11 +410,12 @@ public:
 
   // Registers
   SUBCOMPONENT(pc_reg, RegisterClEn<XLEN>);
-  SUBCOMPONENT(falu_latency_remaining_reg, RegisterClEn<8>);
 
   // Stage seperating registers
   SUBCOMPONENT(ifid_reg, TYPE(IFID<XLEN>));
   SUBCOMPONENT(idex_reg, TYPE(RV5S_IDEX<XLEN>));
+  SUBCOMPONENT(pending_instruction_window, TYPE(PendingInstructionWindow<XLEN>));
+  SUBCOMPONENT(instruction_tag_generator, TYPE(InstructionTagGenerator<XLEN>));
   SUBCOMPONENT(exmem_reg, TYPE(RV5S_EXMEM<XLEN>));
   SUBCOMPONENT(memwb_reg, TYPE(RV5S_MEMWB<XLEN>));
 
@@ -402,6 +451,8 @@ public:
   SUBCOMPONENT(efschz_or, TYPE(Or<1, 2>));
 
   SUBCOMPONENT(mem_stalled_or, TYPE(Or<1, 2>));
+  SUBCOMPONENT(fe_window_enable_and, TYPE(And<1, 2>));
+  SUBCOMPONENT(idex_window_enable_and, TYPE(And<1, 2>));
 
   // Address spaces
   ADDRESSSPACEMM(m_memory);
@@ -482,9 +533,6 @@ public:
       }
       break;
     case EX: {
-      if (stageValid) {
-        namedState = fpEXStageName();
-      }
       if (idex_reg->stalled_out.uValue() == 1) {
         state = StageInfo::State::Stalled;
       } else if (m_cycleCount > EX && idex_reg->valid_out.uValue() == 0) {
@@ -571,6 +619,8 @@ public:
   }
 
   void clockProcessor() override {
+    debugPendingWindow("before");
+
     // An instruction has been retired if the instruction in the WB stage is
     // valid and the PC is within the executable range of the program
     if (memwb_reg->valid_out.uValue() != 0 &&
@@ -579,6 +629,8 @@ public:
     }
 
     Design::clock();
+
+    debugPendingWindow("after ");
   }
 
   void reverse() override {
@@ -593,6 +645,58 @@ public:
         isExecutableAddress(memwb_reg->pc_out.uValue())) {
       m_instructionsRetired--;
     }
+  }
+
+  void debugPendingWindow(const char *phase) const {
+    std::cout << "[PIW " << phase << " cycle=" << m_cycleCount << "] "
+              << "tag in/out=" << std::hex
+              << pending_instruction_window->instr_tag_in.uValue() << "/"
+              << pending_instruction_window->instr_tag_out.uValue()
+              << " valid in/out/exmem=" << std::dec
+              << pending_instruction_window->valid_in.uValue() << "/"
+              << pending_instruction_window->valid_out.uValue() << "/"
+              << exmem_reg->valid_out.uValue()
+              << " pc in/out/exmem=0x" << std::hex
+              << pending_instruction_window->pc_in.uValue() << "/0x"
+              << pending_instruction_window->pc_out.uValue() << "/0x"
+              << exmem_reg->pc_out.uValue()
+              << " alu in/out/exmem=0x"
+              << pending_instruction_window->alures_in.uValue() << "/0x"
+              << pending_instruction_window->alures_out.uValue() << "/0x"
+              << exmem_reg->alures_out.uValue()
+              << " falu in/out/exmem=0x"
+              << pending_instruction_window->falures_in.uValue() << "/0x"
+              << pending_instruction_window->falures_out.uValue() << "/0x"
+              << exmem_reg->falures_out.uValue()
+              << " rd in/out/exmem=" << std::dec
+              << pending_instruction_window->wr_reg_idx_in.uValue() << "/"
+              << pending_instruction_window->wr_reg_idx_out.uValue() << "/"
+              << exmem_reg->wr_reg_idx_out.uValue()
+              << " regW in/out/exmem="
+              << pending_instruction_window->reg_do_write_in.uValue() << "/"
+              << pending_instruction_window->reg_do_write_out.uValue() << "/"
+              << exmem_reg->reg_do_write_out.uValue()
+              << " fpW in/out/exmem="
+              << pending_instruction_window->fp_reg_do_write_in.uValue() << "/"
+              << pending_instruction_window->fp_reg_do_write_out.uValue() << "/"
+              << exmem_reg->fp_reg_do_write_out.uValue()
+              << " memR in/out/exmem="
+              << pending_instruction_window->mem_do_read_in.uValue() << "/"
+              << pending_instruction_window->mem_do_read_out.uValue() << "/"
+              << exmem_reg->mem_do_read_out.uValue()
+              << " memW in/out/exmem="
+              << pending_instruction_window->mem_do_write_in.uValue() << "/"
+              << pending_instruction_window->mem_do_write_out.uValue() << "/"
+              << exmem_reg->mem_do_write_out.uValue()
+              << " clear in/out/exmemIn="
+              << pending_instruction_window->clear_in.uValue() << "/"
+              << pending_instruction_window->clear_out.uValue() << "/"
+              << exmem_reg->clear.uValue()
+              << " enable in/out/exmemIn="
+              << pending_instruction_window->enable_in.uValue() << "/"
+              << pending_instruction_window->enable_out.uValue() << "/"
+              << exmem_reg->enable.uValue()
+              << std::dec << std::endl;
   }
 
   void reset() override {
@@ -620,25 +724,6 @@ public:
   }
 
 private:
-  QString fpEXStageName() const {
-    const unsigned cycle = falu_latency->current_cycle.uValue();
-    if (cycle == 0) {
-      return "";
-    }
-
-    switch (idex_reg->opcode_out.eValue<RVInstr>()) {
-    case RVInstr::FADD:
-    case RVInstr::FSUB:
-      return "A" + QString::number(cycle);
-    case RVInstr::FMUL:
-      return "M" + QString::number(cycle);
-    case RVInstr::FDIV:
-      return "D" + QString::number(cycle);
-    default:
-      return "";
-    }
-  }
-
   /**
    * @brief m_syscallExitCycle
    * The variable will contain the cycle of which an exit system call was
