@@ -5,6 +5,7 @@
 #include "Signal.h"
 #include "VSRTL/core/vsrtl_design.h"
 #include <map>
+#include <vector>
 
 #include "../isa/isa_types.h"
 #include "../isa/isainfo.h"
@@ -210,6 +211,11 @@ public:
    * the current cycle
    */
   virtual StageInfo stageInfo(StageIndex stageIndex) const = 0;
+
+  virtual std::vector<std::pair<StageIndex, StageInfo>>
+  additionalStageInfos() const {
+    return {};
+  }
 
   /**
    * @brief breakpointTriggeringStages

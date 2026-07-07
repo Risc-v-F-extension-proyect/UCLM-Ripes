@@ -104,6 +104,10 @@ void PipelineDiagramModel::gatherStageInfo() {
   for (auto idx : ProcessorHandler::getProcessor()->structure().stageIt())
     m_cycleStageInfos[cycleCount][idx] =
         ProcessorHandler::getProcessor()->stageInfo(idx);
+  for (const auto &stageInfo :
+       ProcessorHandler::getProcessor()->additionalStageInfos()) {
+    m_cycleStageInfos[cycleCount][stageInfo.first] = stageInfo.second;
+  }
 }
 
 QVariant PipelineDiagramModel::data(const QModelIndex &index, int role) const {
