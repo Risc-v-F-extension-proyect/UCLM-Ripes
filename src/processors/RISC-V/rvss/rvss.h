@@ -138,6 +138,11 @@ public:
     fRegisterFile->r2_out >> falu->op2;
     fRegisterFile->r3_out >> falu->op3;
     control->falu_ctrl >> falu->ctrl;
+    0 >> falu->rd_idx_in;
+    0 >> falu->instr_tag_in;
+    1 >> falu->enable_in;
+    1 >> falu->bypass_in;
+    0 >> falu->accepted_in;
 
     // -----------------------------------------------------------------------
     // Data memory
