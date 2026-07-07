@@ -15,10 +15,10 @@ public:
       : Component(name, parent) {
     hazardFEEnable << [this] { return !hasHazard(); };
     hazardIDEXEnable << [this] {
-      return !(hasEcallHazard() || falu_stall.uValue());
+      return !hasEcallHazard();
     };
     hazardEXMEMClear << [this] {
-      return hasEcallHazard() || falu_stall.uValue();
+      return hasEcallHazard();
     };
     hazardIDEXClear << [this] {
       return hasLoadUseHazard() || hasFPLoadUseHazard();
@@ -35,9 +35,10 @@ public:
   INPUTPORT(ex_do_fp_write_en, 1);
 
   INPUTPORT(mem_do_reg_write, 1);
-
   INPUTPORT(wb_do_reg_write, 1);
-  INPUTPORT(falu_stall, 1);
+
+  INPUTPORT(fp_mem_do_reg_write, 1);
+  INPUTPORT(fp_wb_do_reg_write, 1);
 
   INPUTPORT_ENUM(opcode, RVInstr);
   INPUTPORT_ENUM(id_opcode, RVInstr);
@@ -62,7 +63,7 @@ public:
 private:
   bool hasHazard() {
     return hasLoadUseHazard() || hasEcallHazard() ||
-           hasFPLoadUseHazard() || falu_stall.uValue();
+           hasFPLoadUseHazard();
   }
 
   bool hasLoadUseHazard() const {
@@ -107,7 +108,9 @@ private:
     // front-end of the pipeline shall be stalled until the remainder of the
     // pipeline has been cleared and there are no more outstanding writes.
     const bool isEcall = opcode.eValue<RVInstr>() == RVInstr::ECALL;
-    return isEcall && (mem_do_reg_write.uValue() || wb_do_reg_write.uValue());
+    const bool integerOutstandingWrites = mem_do_reg_write.uValue() || wb_do_reg_write.uValue();
+    const bool fpOutstandingWrites = fp_mem_do_reg_write.uValue() || fp_wb_do_reg_write.uValue();
+    return isEcall && (integerOutstandingWrites || fpOutstandingWrites);
   }
 };
 } // namespace core
