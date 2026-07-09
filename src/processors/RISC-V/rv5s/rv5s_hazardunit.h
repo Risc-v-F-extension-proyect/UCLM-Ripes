@@ -83,8 +83,12 @@ private:
   static bool usesFPReg2(RVInstr opc) {
     switch (opc) {
     case RVInstr::FSQRT:
+    case RVInstr::FSQRTD:
+    case RVInstr::FCVTSD:
+    case RVInstr::FCVTDS:
       return false;
     case RVInstr::FSW:
+    case RVInstr::FSD:
       return true;
     default:
       return Control::isFALUInstr(opc);
