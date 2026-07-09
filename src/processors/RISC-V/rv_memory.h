@@ -26,8 +26,10 @@ public:
       case MemOp::SH:
         return 2;
       case MemOp::SW:
+      case MemOp::FSW:
         return 4;
       case MemOp::SD:
+      case MemOp::FSD:
         return 8;
       default:
         return 0;
@@ -51,7 +53,14 @@ public:
       case MemOp::LW:
         return VT_U(signextend<32>(value));
       case MemOp::LD:
+      case MemOp::FLD:
         return value;
+      case MemOp::FLW:
+        if constexpr (dataWidth > 32) {
+          return (VT_U(0xffffffffu) << 32) | (value & 0xffffffffu);
+        } else {
+          return value & 0xffffffffu;
+        }
       default:
         return value;
       }
