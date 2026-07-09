@@ -15,6 +15,7 @@ namespace Assembler {
 DirectiveVec gnuDirectives();
 
 Directive floatDirective();
+Directive doubleFloatDirective();
 
 Directive zeroDirective();
 Directive stringDirective();

@@ -89,6 +89,22 @@ enum class RVInstr {
   FSGNJN,
   FSGNJX,
 
+  /* RV64D Instruction Set */
+  FLD,
+  FSD,
+  FADDD,
+  FSUBD,
+  FMULD,
+  FDIVD,
+  FSQRTD,
+  FMIND,
+  FMAXD,
+  FSGNJD,
+  FSGNJND,
+  FSGNJXD,
+  FCVTSD,
+  FCVTDS,
+
   /* RV32M Standard Extension */
   MUL,
   MULH,
@@ -168,7 +184,19 @@ enum class FALUOp {
   MAX,
   SGNJ,
   SGNJN,
-  SGNJX
+  SGNJX,
+  ADD_D,
+  SUB_D,
+  MUL_D,
+  DIV_D,
+  SQRT_D,
+  MIN_D,
+  MAX_D,
+  SGNJ_D,
+  SGNJN_D,
+  SGNJX_D,
+  CVT_S_D,
+  CVT_D_S
 };
 
 enum class FpRegWrCtr {ENABLE, UNABLE};
@@ -178,7 +206,7 @@ enum class DataMemWrSrc { REG2, FREG2 };
 enum class AluSrc1 { REG1, PC };
 enum class AluSrc2 { REG2, IMM };
 enum class CompOp { NOP, EQ, NE, LT, LTU, GE, GEU };
-enum class MemOp { NOP, LB, LH, LW, LBU, LHU, SB, SH, SW, LWU, LD, SD };
+enum class MemOp { NOP, LB, LH, LW, LBU, LHU, SB, SH, SW, LWU, LD, SD, FLW, FSW, FLD, FSD };
 enum ECALL { none, print_int = 1, print_char = 2, print_string = 4, exit = 10 };
 enum PcSrc { PC4 = 0, ALU = 1 };
 enum PcInc { INC2 = 0, INC4 = 1 };
