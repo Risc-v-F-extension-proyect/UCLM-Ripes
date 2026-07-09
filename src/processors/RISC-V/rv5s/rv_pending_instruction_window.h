@@ -308,13 +308,25 @@ private:
     case RVInstr::FSGNJ:
     case RVInstr::FSGNJN:
     case RVInstr::FSGNJX:
+    case RVInstr::FADDD:
+    case RVInstr::FSUBD:
+    case RVInstr::FMIND:
+    case RVInstr::FMAXD:
+    case RVInstr::FSGNJD:
+    case RVInstr::FSGNJND:
+    case RVInstr::FSGNJXD:
+    case RVInstr::FCVTSD:
+    case RVInstr::FCVTDS:
       return 1;
       //return fpAdd_latency;
     case RVInstr::FMUL:
+    case RVInstr::FMULD:
       return 2;
       //return fpMul_latency;
     case RVInstr::FDIV:
     case RVInstr::FSQRT:
+    case RVInstr::FDIVD:
+    case RVInstr::FSQRTD:
       return 3;
       //return fpDiv_latency;
     default:
@@ -664,7 +676,10 @@ private:
     bool useFPReg1 = Control::isFALUInstr(opc);
     //hacemos lo mismo que antes pero en este caso si es un almacenamiento fp si debemos indicar que
     //el segundo serigstro se usa aunque no sea una aritmetico lógica
-    bool useFPReg2 = (opc == RVInstr::FSW) ? true : Control::isFALUInstr(opc);
+    bool useFPReg2 = (opc == RVInstr::FSW || opc == RVInstr::FSD) ? true :
+                     (opc == RVInstr::FSQRT || opc == RVInstr::FSQRTD ||
+                      opc == RVInstr::FCVTSD || opc == RVInstr::FCVTDS) ? false :
+                     Control::isFALUInstr(opc);
 
     //si usa como primer registro un punto flotante y existe una instrucción incomplera
     //que emplea e mismo registro como destino avisamos de riesgo WaW
@@ -745,7 +760,21 @@ private:
     case FALUOp::SGNJ:
     case FALUOp::SGNJN:
     case FALUOp::SGNJX:
+    case FALUOp::ADD_D:
+    case FALUOp::SUB_D:
+    case FALUOp::MIN_D:
+    case FALUOp::MAX_D:
+    case FALUOp::SGNJ_D:
+    case FALUOp::SGNJN_D:
+    case FALUOp::SGNJX_D:
+    case FALUOp::CVT_S_D:
+    case FALUOp::CVT_D_S:
       return 2;
+    case FALUOp::MUL_D:
+      return 4;
+    case FALUOp::DIV_D:
+    case FALUOp::SQRT_D:
+      return 6;
     default:
       return 0;
     }
