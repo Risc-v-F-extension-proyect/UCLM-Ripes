@@ -20,15 +20,15 @@ public:
     total_cycles << [this] { return totalCycles(); };
 
     //Addition
-    addsub_current_cycle << [this] {return currentCycleFor(RVInstr::FADD, RVInstr::FSUB);};
+    addsub_current_cycle << [this] { return currentCycleForAddSubUnit(); };
     addsub_total_cycles << [this] { return m_addSubLatency; };
 
     //Multiplication
-    mul_current_cycle << [this] { return currentCycleFor(RVInstr::FMUL); };
+    mul_current_cycle << [this] { return currentCycleFor(RVInstr::FMUL, RVInstr::FMULD); };
     mul_total_cycles << [this] { return m_mulLatency; };
 
     //Division
-    div_current_cycle << [this] { return currentCycleFor(RVInstr::FDIV); };
+    div_current_cycle << [this] { return currentCycleFor(RVInstr::FDIV, RVInstr::FSQRT, RVInstr::FDIVD, RVInstr::FSQRTD); };
     div_total_cycles << [this] { return m_divLatency; };
   }
 
@@ -58,10 +58,28 @@ private:
     switch (opc) {
     case RVInstr::FADD:
     case RVInstr::FSUB:
+    case RVInstr::FMIN:
+    case RVInstr::FMAX:
+    case RVInstr::FSGNJ:
+    case RVInstr::FSGNJN:
+    case RVInstr::FSGNJX:
+    case RVInstr::FADDD:
+    case RVInstr::FSUBD:
+    case RVInstr::FMIND:
+    case RVInstr::FMAXD:
+    case RVInstr::FSGNJD:
+    case RVInstr::FSGNJND:
+    case RVInstr::FSGNJXD:
+    case RVInstr::FCVTSD:
+    case RVInstr::FCVTDS:
       return m_addSubLatency;
     case RVInstr::FMUL:
+    case RVInstr::FMULD:
       return m_mulLatency;
     case RVInstr::FDIV:
+    case RVInstr::FSQRT:
+    case RVInstr::FDIVD:
+    case RVInstr::FSQRTD:
       return m_divLatency;
     default:
       return 1;
@@ -138,6 +156,38 @@ private:
       return 0;
     }
     return currentCycle();
+  }
+
+  VSRTL_VT_U currentCycleFor(RVInstr opc1, RVInstr opc2, RVInstr opc3, RVInstr opc4) const {
+    const auto activeOpc = opcode.eValue<RVInstr>();
+    if (activeOpc != opc1 && activeOpc != opc2 && activeOpc != opc3 && activeOpc != opc4) {
+      return 0;
+    }
+    return currentCycle();
+  }
+
+  VSRTL_VT_U currentCycleForAddSubUnit() const {
+    switch (opcode.eValue<RVInstr>()) {
+    case RVInstr::FADD:
+    case RVInstr::FSUB:
+    case RVInstr::FMIN:
+    case RVInstr::FMAX:
+    case RVInstr::FSGNJ:
+    case RVInstr::FSGNJN:
+    case RVInstr::FSGNJX:
+    case RVInstr::FADDD:
+    case RVInstr::FSUBD:
+    case RVInstr::FMIND:
+    case RVInstr::FMAXD:
+    case RVInstr::FSGNJD:
+    case RVInstr::FSGNJND:
+    case RVInstr::FSGNJXD:
+    case RVInstr::FCVTSD:
+    case RVInstr::FCVTDS:
+      return currentCycle();
+    default:
+      return 0;
+    }
   }
 
   unsigned m_addSubLatency = 4;
