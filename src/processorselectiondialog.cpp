@@ -5,6 +5,7 @@
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QSignalBlocker>
 #include <QTimer>
 
 #include "processorhandler.h"
@@ -108,11 +109,7 @@ ProcessorSelectionDialog::ProcessorSelectionDialog(QWidget *parent)
     }
     // Connect checkbox toggle events
     connect(chkbox, &QCheckBox::toggled, this, [this, ext](bool toggled) {
-      if (toggled) {
-        m_selectedExtensionsForID[m_selectedID] << ext;
-      } else {
-        m_selectedExtensionsForID[m_selectedID].removeAll(ext);
-      }
+      handleExtensionToggled(ext, toggled);
       updateFALULatencyOptionsEnabled();
     });
   }
@@ -187,6 +184,10 @@ unsigned ProcessorSelectionDialog::getFALUDivLatency() const {
 }
 
 void ProcessorSelectionDialog::updateSelectedTags() {
+  if (m_ui->xlen->currentData().toInt() == 32) {
+    disableDExtensionForCurrentSelection();
+  }
+
   ISA selectedISA = // hacky hack
       (ISA)(m_ui->isa->currentData().toInt() + m_ui->xlen->currentIndex());
   DatapathType selectedDatapath =
@@ -266,11 +267,7 @@ void ProcessorSelectionDialog::updateDialog(ISA isa, ProcessorTags tags) {
       chkbox->setChecked(true);
     }
     connect(chkbox, &QCheckBox::toggled, this, [this, ext](bool toggled) {
-      if (toggled) {
-        m_selectedExtensionsForID[m_selectedID] << ext;
-      } else {
-        m_selectedExtensionsForID[m_selectedID].removeAll(ext);
-      }
+      handleExtensionToggled(ext, toggled);
       updateFALULatencyOptionsEnabled();
     });
   }
@@ -339,6 +336,88 @@ void ProcessorSelectionDialog::updateFALULatencyOptionsEnabled() {
   const bool hasFExtension =
       m_selectedExtensionsForID[m_selectedID].contains("F");
   m_faluLatencyWidget->setEnabled(isFiveStage && hasFExtension);
+}
+
+void ProcessorSelectionDialog::handleExtensionToggled(const QString &ext,
+                                                      bool toggled) {
+  QStringList &extensions = m_selectedExtensionsForID[m_selectedID];
+
+  if (toggled) {
+    if (!extensions.contains(ext)) {
+      extensions << ext;
+    }
+  } else {
+    extensions.removeAll(ext);
+    if (ext == "F") {
+      extensions.removeAll("D");
+      setExtensionCheckboxChecked("D", false);
+    }
+  }
+
+  if (ext == "D" && toggled) {
+    enableDExtensionDependencies();
+  }
+}
+
+void ProcessorSelectionDialog::enableDExtensionDependencies() {
+  QStringList &extensions = m_selectedExtensionsForID[m_selectedID];
+  if (!extensions.contains("D")) {
+    return;
+  }
+
+  if (!extensions.contains("F")) {
+    extensions << "F";
+  }
+  setExtensionCheckboxChecked("F", true);
+
+  if (m_ui->xlen->currentData().toInt() == 64) {
+    return;
+  }
+
+  const int rv64Index = m_ui->xlen->findData(64);
+  if (rv64Index < 0) {
+    return;
+  }
+
+  m_ui->xlen->setCurrentIndex(rv64Index);
+
+  const ISA rv64ISA = static_cast<ISA>(
+      m_ui->isa->currentData().toInt() + m_ui->xlen->currentIndex());
+  const QList<ProcessorID> rv64Processors =
+      ProcessorRegistry::getProcessor(rv64ISA, m_selectedTags);
+  for (const ProcessorID id : rv64Processors) {
+    QStringList &rv64Extensions = m_selectedExtensionsForID[id];
+    if (!rv64Extensions.contains("D")) {
+      rv64Extensions << "D";
+    }
+    if (!rv64Extensions.contains("F")) {
+      rv64Extensions << "F";
+    }
+  }
+}
+
+void ProcessorSelectionDialog::disableDExtensionForCurrentSelection() {
+  for (const auto &desc : ProcessorRegistry::getAvailableProcessors()) {
+    if (desc.second->isaInfo().isa->bits() == 32) {
+      m_selectedExtensionsForID[desc.first].removeAll("D");
+    }
+  }
+  setExtensionCheckboxChecked("D", false);
+}
+
+void ProcessorSelectionDialog::setExtensionCheckboxChecked(const QString &ext,
+                                                           bool checked) {
+  for (int i = 0; i < m_ui->extensions->layout()->count(); ++i) {
+    QLayoutItem *item = m_ui->extensions->layout()->itemAt(i);
+    auto *checkbox = qobject_cast<QCheckBox *>(item->widget());
+    if (checkbox && checkbox->text() == ext) {
+      if (checkbox->isChecked() != checked) {
+        const QSignalBlocker blocker(checkbox);
+        checkbox->setChecked(checked);
+      }
+      return;
+    }
+  }
 }
 
 void ProcessorSelectionDialog::populateVariants() {

@@ -39,6 +39,10 @@ private:
   void setEnabledVariants();
   void setupFALULatencyOptions();
   void updateFALULatencyOptionsEnabled();
+  void handleExtensionToggled(const QString &ext, bool toggled);
+  void enableDExtensionDependencies();
+  void disableDExtensionForCurrentSelection();
+  void setExtensionCheckboxChecked(const QString &ext, bool checked);
   ProcessorID redirectToValidProcessor(ISA isa, ProcessorTags tags);
 
   ISA m_selectedISA;
