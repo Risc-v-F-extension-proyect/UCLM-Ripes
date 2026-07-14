@@ -61,12 +61,23 @@ public:
       return data_valid.uValue() &&
              Control::do_reg_do_write_ctrl(opcode_data.eValue<RVInstr>());
     };
+    fp_reg_do_write_ctrl_exec << [this] {
+      return exec_valid.uValue() &&
+             Control::do_fp_reg_do_write_ctrl(opcode_exec.eValue<RVInstr>());
+    };
+    fp_reg_do_write_ctrl_data << [this] {
+      return data_valid.uValue() &&
+             Control::do_fp_reg_do_write_ctrl(opcode_data.eValue<RVInstr>());
+    };
 
     reg_wr_src_ctrl << [this] {
       return do_reg_wr_src_ctrl_dual(opcode_exec.eValue<RVInstr>());
     };
     reg_wr_src_data_ctrl << [this] {
       return do_reg_wr_src_ctrl_data(opcode_data.eValue<RVInstr>());
+    };
+    data_mem_wr_src_ctrl << [this] {
+      return Control::do_data_mem_wr_src_ctrl(opcode_data.eValue<RVInstr>());
     };
 
     alu_op1_ctrl_exec << [this] {
@@ -111,10 +122,13 @@ public:
   INPUTPORT(data_valid, 1);
 
   OUTPUTPORT(reg_do_write_ctrl_exec, 1);
+  OUTPUTPORT(fp_reg_do_write_ctrl_exec, 1);
   OUTPUTPORT_ENUM(reg_wr_src_ctrl, RegWrSrcDual);
   OUTPUTPORT_ENUM(reg_wr_src_data_ctrl, RegWrSrcDataDual);
+  OUTPUTPORT_ENUM(data_mem_wr_src_ctrl, DataMemWrSrc);
 
   OUTPUTPORT(reg_do_write_ctrl_data, 1);
+  OUTPUTPORT(fp_reg_do_write_ctrl_data, 1);
 
   OUTPUTPORT(mem_do_write_ctrl, 1);
   OUTPUTPORT(mem_do_read_ctrl, 1);

@@ -16,9 +16,13 @@ public:
         "Instruction issue/execute stage separating register");
     CONNECT_REGISTERED_CLEN_INPUT(r1_data, this->clear, this->enable);
     CONNECT_REGISTERED_CLEN_INPUT(r2_data, this->clear, this->enable);
+    CONNECT_REGISTERED_CLEN_INPUT(f_r1_data, this->clear, this->enable);
+    CONNECT_REGISTERED_CLEN_INPUT(f_r2_data, this->clear, this->enable);
 
     CONNECT_REGISTERED_CLEN_INPUT(wr_reg_idx_data, this->clear, this->enable);
     CONNECT_REGISTERED_CLEN_INPUT(reg_do_write_data, this->clear, this->enable);
+    CONNECT_REGISTERED_CLEN_INPUT(fp_reg_do_write_data, this->clear,
+                                  this->enable);
 
     CONNECT_REGISTERED_CLEN_INPUT(alu_op2_ctrl_data, this->clear, this->enable);
     CONNECT_REGISTERED_CLEN_INPUT(alu_ctrl_data, this->clear, this->enable);
@@ -30,6 +34,7 @@ public:
     CONNECT_REGISTERED_CLEN_INPUT(pc_data, this->clear, this->enable);
     CONNECT_REGISTERED_CLEN_INPUT(rd_reg1_idx_data, this->clear, this->enable);
     CONNECT_REGISTERED_CLEN_INPUT(rd_reg2_idx_data, this->clear, this->enable);
+    CONNECT_REGISTERED_CLEN_INPUT(opcode_data, this->clear, this->enable);
     CONNECT_REGISTERED_CLEN_INPUT(exec_valid, this->clear, this->enable);
     CONNECT_REGISTERED_CLEN_INPUT(data_valid, this->clear, this->enable);
     CONNECT_REGISTERED_CLEN_INPUT(instrsize, this->clear, this->enable);
@@ -41,12 +46,16 @@ public:
 
   REGISTERED_CLEN_INPUT(r1_data, XLEN);
   REGISTERED_CLEN_INPUT(r2_data, XLEN);
+  REGISTERED_CLEN_INPUT(f_r1_data, XLEN);
+  REGISTERED_CLEN_INPUT(f_r2_data, XLEN);
 
   REGISTERED_CLEN_INPUT(rd_reg1_idx_data, c_RVRegsBits);
   REGISTERED_CLEN_INPUT(rd_reg2_idx_data, c_RVRegsBits);
+  REGISTERED_CLEN_INPUT(opcode_data, enumBitWidth<RVInstr>());
 
   REGISTERED_CLEN_INPUT(wr_reg_idx_data, c_RVRegsBits);
   REGISTERED_CLEN_INPUT(reg_do_write_data, 1);
+  REGISTERED_CLEN_INPUT(fp_reg_do_write_data, 1);
   REGISTERED_CLEN_INPUT(reg_wr_src_ctrl_dual, enumBitWidth<RegWrSrcDual>());
   REGISTERED_CLEN_INPUT(reg_wr_src_ctrl_data, enumBitWidth<RegWrSrcDataDual>());
 

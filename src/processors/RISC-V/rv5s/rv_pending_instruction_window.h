@@ -3,6 +3,7 @@
 #include "VSRTL/core/vsrtl_register.h"
 #include "processors/RISC-V/riscv.h"
 
+#include <algorithm>
 #include <array>
 #include <deque>
 #include <limits>
@@ -44,6 +45,7 @@ public:
     bool mem_do_write = false;
     bool mem_do_read = false;
     bool fp_reg_do_write = false;
+    bool do_branch = false;
 
   };
   struct FunctionalUnitInfo{
@@ -55,6 +57,7 @@ public:
     std::array<Entry, WINDOW_SIZE> entries;
     std::array<FunctionalUnitInfo, 4> functionalUnits;
     VSRTL_VT_U lastInputTag = 0;
+    bool pendingControlflowFlush = false;
   };
 
   PendingInstructionWindowState(const std::string &name, SimComponent *parent)
@@ -64,12 +67,58 @@ public:
 
   const std::array<Entry, WINDOW_SIZE> &entries() const { return m_entries; }
   VSRTL_VT_U lastInputTag() const { return m_lastInputTag; }
+  bool pendingControlflowFlush() const { return m_pendingControlflowFlush; }
 
   void setLatencies(unsigned addSub, unsigned mul, unsigned div) {
-    fpAdd_latency = addSub;
-    fpMul_latency = mul;
-    fpDiv_latency = div;
+    setConfiguration(addSub, mul, div, 1, 1, 1, true, true, false);
+  }
+
+  void setConfiguration(unsigned addSub, unsigned mul, unsigned div,
+                        unsigned addSubCount, unsigned mulCount,
+                        unsigned divCount, bool addSubPipelined,
+                        bool mulPipelined, bool divPipelined) {
+    fpAdd_latency = std::max(2u, addSub);
+    fpMul_latency = std::max(3u, mul);
+    fpDiv_latency = std::max(4u, div);
+    fpAdd_count = normalizedCount(addSubCount, addSubPipelined);
+    fpMul_count = normalizedCount(mulCount, mulPipelined);
+    fpDiv_count = normalizedCount(divCount, false);
+    fpAdd_pipelined = addSubPipelined;
+    fpMul_pipelined = mulPipelined;
+    fpDiv_pipelined = false;
     resetFunctionalUnits();
+  }
+
+  unsigned faluLatency(FALUOp op) const {
+    switch (op) {
+    case FALUOp::ADD:
+    case FALUOp::SUB:
+    case FALUOp::MIN:
+    case FALUOp::MAX:
+    case FALUOp::SGNJ:
+    case FALUOp::SGNJN:
+    case FALUOp::SGNJX:
+    case FALUOp::ADD_D:
+    case FALUOp::SUB_D:
+    case FALUOp::MIN_D:
+    case FALUOp::MAX_D:
+    case FALUOp::SGNJ_D:
+    case FALUOp::SGNJN_D:
+    case FALUOp::SGNJX_D:
+    case FALUOp::CVT_S_D:
+    case FALUOp::CVT_D_S:
+      return fpAdd_latency;
+    case FALUOp::MUL:
+    case FALUOp::MUL_D:
+      return fpMul_latency;
+    case FALUOp::DIV:
+    case FALUOp::SQRT:
+    case FALUOp::DIV_D:
+    case FALUOp::SQRT_D:
+      return fpDiv_latency;
+    default:
+      return 0;
+    }
   }
 
   bool containsTag(VSRTL_VT_U tag) const {
@@ -90,8 +139,9 @@ public:
 
     //si la señal input de limpiar esta activada vaciamos el contenido
     //de cada entry de private std::array<Entry, WINDOW_SIZE> m_entries; dentro de PIWS
+    const bool controlflowFlush = m_pendingControlflowFlush;
     const bool inputAlreadyStored = containsTag(instr_tag_in.uValue());
-    if (input_valid_in.uValue() && instr_tag_in.uValue() != 0 &&
+    if (!controlflowFlush && input_valid_in.uValue() && instr_tag_in.uValue() != 0 &&
         instr_tag_in.uValue() != m_lastInputTag) {
       m_lastInputTag = instr_tag_in.uValue();
     }
@@ -155,7 +205,7 @@ public:
     //si la señal de almacenamiento esta activada al igual que la llegada de un
     //identificador unico entonces procedemos a almacenar las señales entrantes
     //en la primera entrada libre de la ventana que podamos
-    if (store_input_in.uValue() && instr_tag_in.uValue() != 0 &&
+    if (!controlflowFlush && store_input_in.uValue() && instr_tag_in.uValue() != 0 &&
         !inputAlreadyStored) {
       for (auto &entry : m_entries) {
         if (!entry.valid) {
@@ -166,6 +216,9 @@ public:
         }
       }
     }
+
+    m_pendingControlflowFlush = !controlflowFlush && stalled_in.uValue() == 0 &&
+                                controlflow_flush_in.uValue() != 0;
   }
 
   //reset hace una limpieza total de todas las entrada existente dentro de PIWS
@@ -174,6 +227,7 @@ public:
     clearEntries();
     resetFunctionalUnits();
     m_lastInputTag = 0;
+    m_pendingControlflowFlush = false;
     //vaciamos el historial de ventanas
     m_reverseStack.clear();
   }
@@ -187,6 +241,7 @@ public:
       m_entries = m_reverseStack.front().entries;
       functionalUnits = m_reverseStack.front().functionalUnits;
       m_lastInputTag = m_reverseStack.front().lastInputTag;
+      m_pendingControlflowFlush = m_reverseStack.front().pendingControlflowFlush;
       //tras copiar el estado de hace un ciclo hacemos que el historial
       //apunte al estado de hace 2 ciclos
       m_reverseStack.pop_front();
@@ -260,6 +315,8 @@ public:
   INPUTPORT(mem_op_in, enumBitWidth<MemOp>());
   INPUTPORT(fp_reg_do_write_in, 1);
   INPUTPORT(data_mem_wr_src_ctrl_in, enumBitWidth<DataMemWrSrc>());
+  INPUTPORT(do_branch_in, 1);
+  INPUTPORT(controlflow_flush_in, 1);
 
   //INPUTPORT_ENUM(opcode_in, RVInstr);
   INPUTPORT(opcode_in, enumBitWidth<RVInstr>());
@@ -273,6 +330,16 @@ private:
   bool fpAdd_pipelined = true;
   bool fpMul_pipelined = true;
   bool fpDiv_pipelined = false;
+  unsigned fpAdd_count = 1;
+  unsigned fpMul_count = 1;
+  unsigned fpDiv_count = 1;
+
+  static unsigned normalizedCount(unsigned count, bool pipelined) {
+    if (pipelined) {
+      return 1;
+    }
+    return std::min(3u, std::max(1u, count));
+  }
 
   //funcion que vacia cada entrada de m_entries
   void clearEntries() {
@@ -284,10 +351,13 @@ private:
 
   void resetFunctionalUnits() {
     functionalUnits = {{
-        {fuAlu_latency, false, fuAlu_latency},
-        {fpAdd_latency, fpAdd_pipelined, fpAdd_latency},
-        {fpMul_latency, fpMul_pipelined, fpMul_latency},
-        {fpDiv_latency, fpDiv_pipelined, 1}
+        {fuAlu_latency, false, 1},
+        {fpAdd_latency, fpAdd_pipelined,
+         fpAdd_pipelined ? fpAdd_latency : fpAdd_count},
+        {fpMul_latency, fpMul_pipelined,
+         fpMul_pipelined ? fpMul_latency : fpMul_count},
+        {fpDiv_latency, fpDiv_pipelined,
+         fpDiv_pipelined ? fpDiv_latency : fpDiv_count}
     }};
   }
 
@@ -296,7 +366,8 @@ private:
   //del ciclo anterior antes de modificarla en el nuevo ciclo
   void saveToStack() {
     if (canReverse()) {
-      m_reverseStack.push_front({m_entries, functionalUnits, m_lastInputTag});
+      m_reverseStack.push_front({m_entries, functionalUnits, m_lastInputTag,
+                                 m_pendingControlflowFlush});
     }
   }
   unsigned functionalUnitIndex(RVInstr opcode) const {
@@ -342,12 +413,25 @@ private:
     if (increaseSpace) {
       const unsigned maxSlots = functionalUnits[index].pipelined
                                     ? functionalUnits[index].latency
-                                    : 1;
+                                    : nonPipelinedCount(index);
       if (functionalUnits[index].freeSlots < maxSlots) {
         ++functionalUnits[index].freeSlots;
       }
     } else if (functionalUnits[index].freeSlots > 0) {
       --functionalUnits[index].freeSlots;
+    }
+  }
+
+  unsigned nonPipelinedCount(unsigned index) const {
+    switch (index) {
+    case 1:
+      return fpAdd_count;
+    case 2:
+      return fpMul_count;
+    case 3:
+      return fpDiv_count;
+    default:
+      return 1;
     }
   }
 
@@ -390,6 +474,7 @@ private:
     entry.fp_reg_do_write = fp_reg_do_write_in.uValue() != 0;
     entry.data_mem_wr_src_ctrl =
         static_cast<DataMemWrSrc>(data_mem_wr_src_ctrl_in.uValue());
+    entry.do_branch = do_branch_in.uValue() != 0;
 
     entry.opcode = safeOpcode(opcode_in.uValue());
     entry.instr_tag = instr_tag_in.uValue();
@@ -406,6 +491,7 @@ private:
   //es una cola de ventanas para el tema del historial de ciclos
   std::deque<StateSnapshot> m_reverseStack;
   VSRTL_VT_U m_lastInputTag = 0;
+  bool m_pendingControlflowFlush = false;
 
   //estructura que usaremos para informarnos sobre disponibilidad de cada unidad funcionl
   //ante una instrucción pretendienta desde ID
@@ -413,7 +499,7 @@ private:
       {1, false, 1},
       {fpAdd_latency, fpAdd_pipelined, fpAdd_latency},
       {fpMul_latency, fpMul_pipelined, fpMul_latency},
-      {fpDiv_latency, fpDiv_pipelined, 1}
+      {fpDiv_latency, fpDiv_pipelined, fpDiv_count}
   }};
 };
 
@@ -463,6 +549,8 @@ public:
     mem_op_in >> state->mem_op_in;
     fp_reg_do_write_in >> state->fp_reg_do_write_in;
     data_mem_wr_src_ctrl_in >> state->data_mem_wr_src_ctrl_in;
+    do_branch_in >> state->do_branch_in;
+    controlflow_flush_in >> state->controlflow_flush_in;
 
     opcode_in >> state->opcode_in;
     instr_tag_in >> state->instr_tag_in;
@@ -539,6 +627,10 @@ public:
       return outputFromInput() ? data_mem_wr_src_ctrl_in.uValue()
                                : static_cast<VSRTL_VT_U>(selected()->data_mem_wr_src_ctrl);
     };
+    do_branch_out << [this] {
+      return outputFromInput() ? do_branch_in.uValue()
+                               : static_cast<VSRTL_VT_U>(selected()->do_branch);
+    };
 
     instr_tag_out << [this] {
       return outputFromInput() ? instr_tag_in.uValue() : selected()->instr_tag;
@@ -569,6 +661,14 @@ public:
 
   void setLatencies(unsigned addSub, unsigned mul, unsigned div) {
     state->setLatencies(addSub, mul, div);
+  }
+
+  void setConfiguration(unsigned addSub, unsigned mul, unsigned div,
+                        unsigned addSubCount, unsigned mulCount,
+                        unsigned divCount, bool addSubPipelined,
+                        bool mulPipelined, bool divPipelined) {
+    state->setConfiguration(addSub, mul, div, addSubCount, mulCount, divCount,
+                            addSubPipelined, mulPipelined, divPipelined);
   }
 
   // Register control
@@ -607,6 +707,8 @@ public:
   INPUTPORT(fp_reg_do_write_in, 1);
   INPUTPORT(data_mem_wr_src_ctrl_in, enumBitWidth<DataMemWrSrc>());
   INPUTPORT_ENUM(falu_ctrl_in, FALUOp);
+  INPUTPORT(do_branch_in, 1);
+  INPUTPORT(controlflow_flush_in, 1);
 
   OUTPUTPORT(reg_wr_src_ctrl_out, enumBitWidth<RegWrSrc>());
   OUTPUTPORT(wr_reg_idx_out, c_RVRegsBits);
@@ -616,6 +718,7 @@ public:
   OUTPUTPORT(mem_op_out, enumBitWidth<MemOp>());
   OUTPUTPORT(fp_reg_do_write_out, 1);
   OUTPUTPORT(data_mem_wr_src_ctrl_out, enumBitWidth<DataMemWrSrc>());
+  OUTPUTPORT(do_branch_out, 1);
 
   // Opcode identifies EX-local instructions which bypass window storage.
   INPUTPORT(opcode_in, enumBitWidth<RVInstr>());
@@ -720,17 +823,22 @@ private:
   }
 
   bool inputValid() const {
+    if (controlflowFlushPending()) {
+      return false;
+    }
     const auto opcode = State::safeOpcode(opcode_in.uValue());
-    const bool conditionalBranch = Control::do_branch_ctrl(opcode) != 0;
-    const bool jumpWithoutLink =
-        Control::do_jump_ctrl(opcode) != 0 &&
-        (reg_do_write_in.uValue() == 0 || wr_reg_idx_in.uValue() == 0);
 
     //es valido si se activa la señal de valida, un identificador
     //valido distindo de 0
     return valid_in.uValue() != 0 && instr_tag_in.uValue() != 0 &&
-           opcode != RVInstr::ECALL && !conditionalBranch &&
-           !jumpWithoutLink &&
+           opcode != RVInstr::ECALL &&
+           instr_tag_in.uValue() != state->lastInputTag() &&
+           !inputAlreadyStored();
+  }
+
+  bool controlflowInput() const {
+    return !controlflowFlushPending() && valid_in.uValue() != 0 &&
+           instr_tag_in.uValue() != 0 && do_branch_in.uValue() != 0 &&
            instr_tag_in.uValue() != state->lastInputTag() &&
            !inputAlreadyStored();
   }
@@ -746,38 +854,7 @@ private:
 
   //retorno de latencia segun el tipo de instrucción entrante
   VSRTL_VT_U latencyForInput() const {
-    switch (static_cast<FALUOp>(falu_ctrl_in.uValue())) {
-    case FALUOp::ADD:
-    case FALUOp::SUB:
-      return 2;
-    case FALUOp::MUL:
-      return 4;
-    case FALUOp::DIV:
-    case FALUOp::SQRT:
-      return 6;
-    case FALUOp::MIN:
-    case FALUOp::MAX:
-    case FALUOp::SGNJ:
-    case FALUOp::SGNJN:
-    case FALUOp::SGNJX:
-    case FALUOp::ADD_D:
-    case FALUOp::SUB_D:
-    case FALUOp::MIN_D:
-    case FALUOp::MAX_D:
-    case FALUOp::SGNJ_D:
-    case FALUOp::SGNJN_D:
-    case FALUOp::SGNJX_D:
-    case FALUOp::CVT_S_D:
-    case FALUOp::CVT_D_S:
-      return 2;
-    case FALUOp::MUL_D:
-      return 4;
-    case FALUOp::DIV_D:
-    case FALUOp::SQRT_D:
-      return 6;
-    default:
-      return 0;
-    }
+    return state->faluLatency(static_cast<FALUOp>(falu_ctrl_in.uValue()));
   }
 
   //comprueba si las señales input pueden generar WaW
@@ -832,6 +909,9 @@ private:
 
   //decidimos si emitimos una instruccion almacenada o no
   const Entry *selected() const {
+    if (controlflowFlushPending()) {
+      return &m_emptyEntry;
+    }
     //inicialmente la entrada valida es una estructura vacia
     const Entry *best = &m_emptyEntry;
     //recorremos cada entrada de la ventana de instrucciones
@@ -855,7 +935,7 @@ private:
   //instrucción alamcenada en la ventana de instrucciones pendientes
   bool inputReadyForBypass() const {
     const auto opcode = State::safeOpcode(opcode_in.uValue());
-    return inputValid() && !Control::isFALUInstr(opcode) &&
+    return (inputValid() || controlflowInput()) && !Control::isFALUInstr(opcode) &&
            !inputHasOlderWaw();
     //no podemos aplicar bypass si resulta que hay resultados salientes desde la FALU
     //de una instrucción con un tag menor al de la instrucción que pretende
@@ -863,6 +943,9 @@ private:
   }
 
   bool outputFromInput() const {
+    if (controlflowInput()) {
+      return true;
+    }
     //si no se cumple lo mencionado en el metodo anterior no podemos aplicar bypass
     if (!inputReadyForBypass()) {
       return false;
@@ -907,6 +990,9 @@ private:
   //estamos seguros que podemos lanzar al exterior si podemos
   //realizar bypass o bien disponer de una instrucción almacenada lista
   bool outputValid() const {
+    if (controlflowFlushPending()) {
+      return false;
+    }
     if (ecallInEx()) {
       return false;
     }
@@ -915,11 +1001,14 @@ private:
 
   //debemos almacenar los inputs si son salidos y no se puede aplicar bypass
   bool shouldStoreInput() const {
-    return inputValid() && !outputFromInput();
+    return (inputValid() || controlflowInput()) && !outputFromInput();
   }
 
   //extracción del tag de la instrucción emitida
   VSRTL_VT_U emittedTag() const {
+    if (controlflowFlushPending()) {
+      return 0;
+    }
     if (ecallInEx()) {
       return 0;
     }
@@ -960,6 +1049,10 @@ private:
 
     return state->structuralRiscTrigger(
         idOpcode, releasedOpcode, releasesUnit, pendingOpcode, pendingWillStore);
+  }
+
+  bool controlflowFlushPending() const {
+    return state->pendingControlflowFlush();
   }
 
   //estructura vacia por defecto que se usa si no se

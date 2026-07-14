@@ -20,7 +20,7 @@ using namespace Ripes;
 template <unsigned XLEN>
 class FALU : public ClockedComponent {
 public:
-  SetGraphicsType(FPUnits);
+  SetGraphicsType(ALU);
   FALU(const std::string &name, SimComponent *parent)
       : ClockedComponent(name, parent) {
 
@@ -128,48 +128,33 @@ public:
 
   //conficucación inicial del contenido de la FALU
   void setLatencies(unsigned addSub, unsigned mul, unsigned div) {
-    m_addSubLatency = std::max(1u, addSub);
-    m_mulLatency = std::max(1u, mul);
-    m_divLatency = std::max(1u, div);
+    setConfiguration(addSub, mul, div, 1, 1, 1, true, true, false);
+  }
+
+  void setConfiguration(unsigned addSub, unsigned mul, unsigned div,
+                        unsigned addSubCount, unsigned mulCount,
+                        unsigned divCount, bool addSubPipelined,
+                        bool mulPipelined, bool divPipelined) {
+    m_addSubLatency = std::max(2u, addSub);
+    m_mulLatency = std::max(3u, mul);
+    m_divLatency = std::max(4u, div);
+    m_addSubCount = normalizedCount(addSubCount, addSubPipelined);
+    m_mulCount = normalizedCount(mulCount, mulPipelined);
+    m_divCount = normalizedCount(divCount, false);
+    m_addSubPipelined = addSubPipelined;
+    m_mulPipelined = mulPipelined;
+    m_divPipelined = false;
     initializeUnits();
   }
 
   //función explusiva para la animación de la FALU en la UI
   std::vector<unsigned> getGraphicsPipelineStages() const override {
-    if (bypass_in.uValue()) {
-      return {};
-    }
-    return {m_addSubLatency, m_mulLatency, m_divLatency};
+    return {};
   }
 
   //función explusiva para la animación de la FALU en la UI
   std::vector<std::vector<bool>> getGraphicsPipelineActivity() const override {
-    if (bypass_in.uValue()) {
-      return {};
-    }
-
-    std::vector<std::vector<bool>> activity = {
-        std::vector<bool>(m_addSubLatency, false),
-        std::vector<bool>(m_mulLatency, false),
-        std::vector<bool>(m_divLatency, false)};
-
-    for (unsigned unitIdx = 0; unitIdx < m_units.size(); ++unitIdx) {
-      const std::vector<int> &assignedStage = m_units.at(unitIdx).assignedStage;
-      for (unsigned stage = 0; stage < assignedStage.size(); ++stage) {
-        activity.at(unitIdx).at(stage) = assignedStage.at(stage) >= 0;
-      }
-    }
-    const FALUOp incomingOp = opFromValue(ctrl.uValue());
-    const VSRTL_VT_U incomingTag = instr_tag_in.uValue();
-    //if (enable_in.uValue() && incomingTag != 0 && isStoredOp(incomingOp) &&
-    if (enable_in.uValue() && incomingTag != 0 && incomingOp != FALUOp::NOP &&
-        incomingTag != m_lastInputTag) {
-      const unsigned incomingUnit = unitIndex(incomingOp);
-      if (availableUnitEntry(incomingUnit)) {
-        activity.at(incomingUnit).at(0) = true;
-      }
-    }
-    return activity;
+    return {};
   }
 
   struct PipelineDiagramEntry {
@@ -177,6 +162,7 @@ public:
     VSRTL_VT_U instrTag = 0;
     unsigned unit = 0;
     unsigned stage = 0;
+    unsigned unitType = 0;
   };
 
   unsigned pipelineDiagramSlotCount() const {
@@ -201,7 +187,7 @@ public:
         }
         const Entry &entry = unit.entries.at(static_cast<unsigned>(entryIdx));
         result.at(offset + static_cast<unsigned>(entryIdx)) = {
-            entry.valid, entry.instr_tag, unitIdx, stage};
+            entry.valid, entry.instr_tag, unitIdx, stage, unit.logicalIndex};
       }
     }
 
@@ -211,8 +197,11 @@ public:
     //if (enable_in.uValue() && incomingTag != 0 && isStoredOp(incomingOp) &&
     if (enable_in.uValue() && incomingTag != 0 && incomingOp != FALUOp::NOP &&
         incomingTag != m_lastInputTag) {
-      const unsigned incomingUnit = unitIndex(incomingOp);
-      preview = {true, incomingTag, incomingUnit, 0};
+      const auto incomingUnit = availablePhysicalUnit(logicalUnitIndex(incomingOp));
+      if (incomingUnit) {
+        preview = {true, incomingTag, *incomingUnit, 0,
+                   m_units.at(*incomingUnit).logicalIndex};
+      }
     }
     result.push_back(preview);
     return result;
@@ -274,12 +263,14 @@ private:
   };
 
   struct FunctionalUnit {
+    unsigned logicalIndex = 0;
+    bool pipelined = true;
     std::vector<Entry> entries;
     std::vector<int> assignedStage;
   };
 
-  //alias de un array de 3 unidades funcionales, FADD/FSUB, FMUL y FDIV
-  using Units = std::array<FunctionalUnit, 3>;
+  //alias del vector de unidades funcionales fisicas disponibles
+  using Units = std::vector<FunctionalUnit>;
   //alias de un array de tamaño 32 donde cada indice i representa la referencia de una Entry
   //que posee como rd el registro del indice i dentro del banco de instrucciones FP
   using LastWriters = std::array<std::optional<EntryRef>, c_RVRegs>;
@@ -347,7 +338,7 @@ private:
 
   //indicador del indice de la unidad funcional a la cual pertenece el tipo
   //de operación según op
-  static unsigned unitIndex(FALUOp op) {
+  static unsigned logicalUnitIndex(FALUOp op) {
     switch (op) {
     case FALUOp::ADD:
     case FALUOp::SUB:
@@ -372,16 +363,36 @@ private:
   //indicador de la latencia de la unidad funcional que se encuentra en el
   //indice index dentro del array de unidades funcionales
   unsigned unitLatency(unsigned index) const {
-    switch (index) {
-    case 0:
-      return m_addSubLatency;
-    case 1:
-      return m_mulLatency;
-    case 2:
-      return m_divLatency;
-    default:
+    return static_cast<unsigned>(m_units.at(index).entries.size());
+  }
+
+  static unsigned normalizedCount(unsigned count, bool pipelined) {
+    if (pipelined) {
       return 1;
     }
+    return std::min(3u, std::max(1u, count));
+  }
+
+  void appendUnits(unsigned logicalIndex, unsigned latency, unsigned count,
+                   bool pipelined) {
+    for (unsigned i = 0; i < count; ++i) {
+      FunctionalUnit unit;
+      unit.logicalIndex = logicalIndex;
+      unit.pipelined = pipelined;
+      unit.entries.assign(latency, Entry{});
+      unit.assignedStage.assign(latency, -1);
+      m_units.push_back(unit);
+    }
+  }
+
+  std::optional<unsigned> availablePhysicalUnit(unsigned logicalIndex) const {
+    for (unsigned unitIdx = 0; unitIdx < m_units.size(); ++unitIdx) {
+      if (m_units.at(unitIdx).logicalIndex == logicalIndex &&
+          availableUnitEntry(unitIdx)) {
+        return unitIdx;
+      }
+    }
+    return std::nullopt;
   }
 
   //funcion que en caso de poderse almacena el estado de FALU en el ciclo anterior
@@ -397,12 +408,10 @@ private:
   //aparte de instanciar el vector de registros destino vacio al no existir
   //dentro de la falu
   void initializeUnits() {
-    m_units.at(0).entries.assign(m_addSubLatency, Entry{});
-    m_units.at(0).assignedStage.assign(m_addSubLatency, -1);
-    m_units.at(1).entries.assign(m_mulLatency, Entry{});
-    m_units.at(1).assignedStage.assign(m_mulLatency, -1);
-    m_units.at(2).entries.assign(m_divLatency, Entry{});
-    m_units.at(2).assignedStage.assign(m_divLatency, -1);
+    m_units.clear();
+    appendUnits(0, m_addSubLatency, m_addSubCount, m_addSubPipelined);
+    appendUnits(1, m_mulLatency, m_mulCount, m_mulPipelined);
+    appendUnits(2, m_divLatency, m_divCount, m_divPipelined);
     m_lastWriters.fill(std::nullopt);
     m_outputEntry.reset();
     m_lastInputTag = 0;
@@ -450,12 +459,13 @@ private:
     if (!enable_in.uValue() || op == FALUOp::NOP || tag == 0 || tag == m_lastInputTag) {
       return;
     }
-    const unsigned targetUnit = unitIndex(op);
-    if (!availableUnitEntry(targetUnit)) {
+    const std::optional<unsigned> targetUnit =
+        availablePhysicalUnit(logicalUnitIndex(op));
+    if (!targetUnit) {
       return;
     }
     //consultamos si la primera etapa de la unidad está disponible
-    const std::optional<unsigned> freeIndex = firstFreeEntry(targetUnit);
+    const std::optional<unsigned> freeIndex = firstFreeEntry(*targetUnit);
     if (!freeIndex) {
       return;
     }
@@ -465,14 +475,14 @@ private:
     //más en adelante nos servirá para vincular la información de esta instrucción
     //con el vector de registros destinos para indicar qué usaremos rd como destino
     const EntryRef currentRef{
-      static_cast<uint8_t>(targetUnit),
+      static_cast<uint8_t>(*targetUnit),
       static_cast<uint8_t>(*freeIndex)
     };
-    FunctionalUnit &unit = m_units.at(targetUnit);
+    FunctionalUnit &unit = m_units.at(*targetUnit);
     Entry &entry = unit.entries.at(*freeIndex);
-    const unsigned latency = unitLatency(targetUnit);
+    const unsigned latency = unitLatency(*targetUnit);
 
-    const unsigned initialStage = stageAssignation(targetUnit);
+    const unsigned initialStage = stageAssignation(*targetUnit);
     //asignamos las señales de la instrucción y otros valores necesarios en la entrada libre
     entry.valid = true;
     //la logica de completed es sencilla, al entrar en la falu en realidad necesitamos estar asignados
@@ -583,12 +593,13 @@ private:
 
   //función que verifica si una unidad funcional puede aceptar una nueva entrada
   bool availableUnitEntry(unsigned unitIdx) const {
-    const std::vector<Entry> &entries = m_units.at(unitIdx).entries;
+    const FunctionalUnit &unit = m_units.at(unitIdx);
+    const std::vector<Entry> &entries = unit.entries;
 
     //si la unidad funcional es la de división, como no está segmentada solo puede
     //aceptar una nueva instrucción si estan todas sus entradas vacias, con haber al menos
     //una ocupada ya se rechaza la acptura de señales en la FALU
-    if (unitIdx == 2) {
+    if (!unit.pipelined) {
       return std::none_of(
         entries.begin(),
         entries.end(),
@@ -608,7 +619,7 @@ private:
     if (latency <= 1) {
       return 0;
     }
-    if (unitIdx == 2 ||
+    if (!m_units.at(unitIdx).pipelined ||
       m_units.at(unitIdx).assignedStage.at(1) < 0) {
       return 1;
     }
@@ -851,6 +862,12 @@ private:
   unsigned m_addSubLatency = 4;
   unsigned m_mulLatency = 7;
   unsigned m_divLatency = 25;
+  unsigned m_addSubCount = 1;
+  unsigned m_mulCount = 1;
+  unsigned m_divCount = 1;
+  bool m_addSubPipelined = true;
+  bool m_mulPipelined = true;
+  bool m_divPipelined = false;
 };
 
 } // namespace core

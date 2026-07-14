@@ -5,6 +5,8 @@
 
 #include "processorregistry.h"
 
+QT_FORWARD_DECLARE_CLASS(QCheckBox)
+
 namespace Ripes {
 
 namespace Ui {
@@ -24,6 +26,12 @@ public:
   unsigned getFALUAddSubLatency() const;
   unsigned getFALUMulLatency() const;
   unsigned getFALUDivLatency() const;
+  unsigned getFALUAddSubCount() const;
+  unsigned getFALUMulCount() const;
+  unsigned getFALUDivCount() const;
+  bool getFALUAddSubPipelined() const;
+  bool getFALUMulPipelined() const;
+  bool getFALUDivPipelined() const;
 
   ProcessorID getSelectedId() const { return m_selectedID; }
 
@@ -54,5 +62,11 @@ private:
   QSpinBox *m_faluAddSubLatency = nullptr;
   QSpinBox *m_faluMulLatency = nullptr;
   QSpinBox *m_faluDivLatency = nullptr;
+  QSpinBox *m_faluAddSubCount = nullptr;
+  QSpinBox *m_faluMulCount = nullptr;
+  QSpinBox *m_faluDivCount = nullptr;
+  QCheckBox *m_faluAddSubPipelined = nullptr;
+  QCheckBox *m_faluMulPipelined = nullptr;
+  QCheckBox *m_faluDivPipelined = nullptr;
 };
 } // namespace Ripes

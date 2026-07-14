@@ -4,12 +4,14 @@
 #include <QDir>
 #include <QFontMetrics>
 #include <QMessageBox>
-#include <QPushButton>
 #include <QScrollBar>
 #include <QSpinBox>
 #include <QTemporaryFile>
 
+#include <limits>
+
 #include "consolewidget.h"
+#include "fpuniciclediagramwidget.h"
 #include "instructionmodel.h"
 #include "pipelinediagrammodel.h"
 #include "pipelinediagramwidget.h"
@@ -24,6 +26,7 @@
 #include "syscall/systemio.h"
 
 #include "VSRTL/graphics/vsrtl_widget.h"
+#include "VSRTL/core/vsrtl_design.h"
 
 #include "processors/interface/ripesprocessor.h"
 
@@ -96,6 +99,8 @@ ProcessorTab::ProcessorTab(QToolBar *controlToolbar,
   }
 
   m_stageModel = new PipelineDiagramModel(this);
+  m_fpUnicicleDiagramWidget = new FPUnicicleDiagramWidget(this);
+  m_fpUnicicleDiagramWidget->resize(1200, 720);
 
   updateInstructionModel();
   connect(ProcessorHandler::get(), &ProcessorHandler::procStateChangedNonRun,
@@ -106,6 +111,12 @@ ProcessorTab::ProcessorTab(QToolBar *controlToolbar,
           this, [this] {
             m_reverseAction->setEnabled(m_vsrtlWidget->isReversible() &&
                                         !m_autoClockAction->isChecked());
+            if (m_targetCycle && !m_targetCycle->hasFocus()) {
+              const auto cycle =
+                  ProcessorHandler::getProcessor()->getCycleCount();
+              m_targetCycle->setValue(static_cast<int>(std::min<long long>(
+                  cycle, std::numeric_limits<int>::max())));
+            }
           });
 
   setupSimulatorActions(controlToolbar);
@@ -276,6 +287,24 @@ void ProcessorTab::setupSimulatorActions(QToolBar *controlToolbar) {
   connect(m_runAction, &QAction::toggled, this, &ProcessorTab::run);
   controlToolbar->addAction(m_runAction);
 
+  m_targetCycle = new QSpinBox(this);
+  m_targetCycle->setRange(0, std::numeric_limits<int>::max());
+  m_targetCycle->setPrefix("cycle ");
+  m_targetCycle->setToolTip("Target cycle");
+  if (const auto *processor = ProcessorHandler::getProcessor()) {
+    m_targetCycle->setValue(static_cast<int>(std::min<long long>(
+        processor->getCycleCount(), std::numeric_limits<int>::max())));
+  }
+  controlToolbar->addWidget(m_targetCycle);
+
+  const QIcon goToCycleIcon = QIcon(":/icons/go-to-cycle.svg");
+  m_goToCycleAction = new QAction(goToCycleIcon, "Go to cycle", this);
+  m_goToCycleAction->setToolTip(
+      "Run or rewind the simulator to the selected cycle");
+  connect(m_goToCycleAction, &QAction::triggered, this,
+          &ProcessorTab::goToCycle);
+  controlToolbar->addAction(m_goToCycleAction);
+
   // Setup processor-tab only actions
   m_displayValuesAction = new QAction("Show processor signal values", this);
   m_displayValuesAction->setCheckable(true);
@@ -294,6 +323,13 @@ void ProcessorTab::setupSimulatorActions(QToolBar *controlToolbar) {
   connect(m_pipelineDiagramAction, &QAction::triggered, this,
           &ProcessorTab::showPipelineDiagram);
   m_toolbar->addAction(m_pipelineDiagramAction);
+
+  const QIcon fpUnicicleIcon = QIcon(":/icons/unicycle-diagram.svg");
+  m_fpUnicicleDiagramAction =
+      new QAction(fpUnicicleIcon, "Show FP unicicle diagram", this);
+  connect(m_fpUnicicleDiagramAction, &QAction::triggered, this,
+          &ProcessorTab::showFPUnicicleDiagram);
+  m_toolbar->addAction(m_fpUnicicleDiagramAction);
 
   m_darkmodeAction = new QAction("Processor darkmode", this);
   m_darkmodeAction->setCheckable(true);
@@ -470,7 +506,10 @@ void ProcessorTab::restart() {
   enableSimulatorControls();
 }
 
-ProcessorTab::~ProcessorTab() { delete m_ui; }
+ProcessorTab::~ProcessorTab() {
+  delete m_fpUnicicleDiagramWidget;
+  delete m_ui;
+}
 
 void ProcessorTab::processorFinished() {
   // Disallow further clocking of the circuit
@@ -487,7 +526,10 @@ void ProcessorTab::enableSimulatorControls() {
   m_runAction->setEnabled(true);
   m_reverseAction->setEnabled(m_vsrtlWidget->isReversible());
   m_resetAction->setEnabled(true);
+  m_goToCycleAction->setEnabled(true);
+  m_targetCycle->setEnabled(true);
   m_pipelineDiagramAction->setEnabled(true);
+  m_fpUnicicleDiagramAction->setEnabled(true);
 }
 
 void ProcessorTab::updateInstructionLabels() {
@@ -552,6 +594,74 @@ void ProcessorTab::autoClockTimeout() {
   ProcessorHandler::clock();
 }
 
+void ProcessorTab::goToCycle() {
+  if (m_autoClockAction->isChecked()) {
+    m_autoClockAction->setChecked(false);
+  }
+
+  auto *processor = ProcessorHandler::getProcessorNonConst();
+  if (!processor) {
+    return;
+  }
+
+  auto *vsrtlProcessor = dynamic_cast<vsrtl::SimDesign *>(processor);
+  if (vsrtlProcessor) {
+    vsrtlProcessor->setEnableSignals(false);
+  }
+
+  const long long target = m_targetCycle->value();
+  const long long current = processor->getCycleCount();
+  if (target < current) {
+    const long long reverseDistance = current - target;
+    const long long maxReverseCycles =
+        RipesSettings::value(RIPES_SETTING_REWINDSTACKSIZE).toLongLong();
+    if (!(processor->features() & RipesProcessor::isReversible) ||
+        reverseDistance > maxReverseCycles) {
+      RipesSettings::getObserver(RIPES_GLOBALSIGNAL_REQRESET)->trigger();
+      processor = ProcessorHandler::getProcessorNonConst();
+      vsrtlProcessor = dynamic_cast<vsrtl::SimDesign *>(processor);
+      if (vsrtlProcessor) {
+        vsrtlProcessor->setEnableSignals(false);
+      }
+    }
+  }
+
+  if (target < processor->getCycleCount()) {
+    while (processor->getCycleCount() > target) {
+      const long long before = processor->getCycleCount();
+      processor->reverseProcessor();
+      if (processor->getCycleCount() == before) {
+        RipesSettings::getObserver(RIPES_GLOBALSIGNAL_REQRESET)->trigger();
+        processor = ProcessorHandler::getProcessorNonConst();
+        vsrtlProcessor = dynamic_cast<vsrtl::SimDesign *>(processor);
+        if (vsrtlProcessor) {
+          vsrtlProcessor->setEnableSignals(false);
+        }
+        break;
+      }
+    }
+  }
+
+  while (processor->getCycleCount() < target && !processor->finished()) {
+    processor->clock();
+  }
+
+  if (vsrtlProcessor) {
+    vsrtlProcessor->setEnableSignals(true);
+  }
+
+  updateStatistics();
+  updateInstructionLabels();
+  m_vsrtlWidget->sync();
+  if (processor->finished()) {
+    processorFinished();
+  } else {
+    enableSimulatorControls();
+  }
+  m_targetCycle->setValue(static_cast<int>(std::min<long long>(
+      processor->getCycleCount(), std::numeric_limits<int>::max())));
+}
+
 void ProcessorTab::autoClock(bool state) {
   const QIcon startAutoClockIcon = QIcon(":/icons/step-clock.svg");
   const QIcon stopAutoTimerIcon = QIcon(":/icons/stop-clock.svg");
@@ -573,8 +683,11 @@ void ProcessorTab::autoClock(bool state) {
   m_clockAction->setEnabled(!state);
   m_reverseAction->setEnabled(!state);
   m_resetAction->setEnabled(!state);
+  m_goToCycleAction->setEnabled(!state);
+  m_targetCycle->setEnabled(!state);
   m_displayValuesAction->setEnabled(!state);
   m_pipelineDiagramAction->setEnabled(!state);
+  m_fpUnicicleDiagramAction->setEnabled(!state);
   m_runAction->setEnabled(!state);
 }
 
@@ -597,8 +710,11 @@ void ProcessorTab::run(bool state) {
   m_autoClockAction->setEnabled(!state);
   m_reverseAction->setEnabled(!state);
   m_resetAction->setEnabled(!state);
+  m_goToCycleAction->setEnabled(!state);
+  m_targetCycle->setEnabled(!state);
   m_displayValuesAction->setEnabled(!state);
   m_pipelineDiagramAction->setEnabled(!state);
+  m_fpUnicicleDiagramAction->setEnabled(!state);
 
   // Disable widgets which are not updated when running the processor
   m_vsrtlWidget->setEnabled(!state);
@@ -614,5 +730,12 @@ void ProcessorTab::reverse() {
 void ProcessorTab::showPipelineDiagram() {
   auto w = PipelineDiagramWidget(m_stageModel);
   w.exec();
+}
+
+void ProcessorTab::showFPUnicicleDiagram() {
+  m_fpUnicicleDiagramWidget->refreshDiagram();
+  m_fpUnicicleDiagramWidget->show();
+  m_fpUnicicleDiagramWidget->raise();
+  m_fpUnicicleDiagramWidget->activateWindow();
 }
 } // namespace Ripes

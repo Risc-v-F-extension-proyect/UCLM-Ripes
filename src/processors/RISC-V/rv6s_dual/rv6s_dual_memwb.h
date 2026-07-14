@@ -22,6 +22,8 @@ public:
     CONNECT_REGISTERED_INPUT(exec_valid);
     CONNECT_REGISTERED_INPUT(data_valid);
     CONNECT_REGISTERED_INPUT(alures_data);
+    CONNECT_REGISTERED_INPUT(falures_data);
+    CONNECT_REGISTERED_INPUT(fp_reg_do_write_data);
   }
 
   REGISTERED_INPUT(wr_reg_idx_data, c_RVRegsBits);
@@ -30,6 +32,8 @@ public:
   REGISTERED_INPUT(reg_wr_src_ctrl_data, enumBitWidth<RegWrSrcDataDual>());
   REGISTERED_INPUT(pc_data, XLEN);
   REGISTERED_INPUT(alures_data, XLEN);
+  REGISTERED_INPUT(falures_data, XLEN);
+  REGISTERED_INPUT(fp_reg_do_write_data, 1);
 
   // Valid signals for each way (not register clearing)
   REGISTERED_INPUT(exec_valid, 1);

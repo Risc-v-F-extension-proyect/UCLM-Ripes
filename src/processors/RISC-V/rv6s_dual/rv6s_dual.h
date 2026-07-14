@@ -18,6 +18,8 @@
 
 // Specialized dual-issue components
 #include "rv6s_dual_control.h"
+#include "rv6s_dual_falu.h"
+#include "rv6s_dual_fregisterfile.h"
 #include "rv6s_dual_instr_mem.h"
 #include "rv6s_dual_registerfile.h"
 #include "rv6s_dual_uncompress.h"
@@ -220,6 +222,23 @@ public:
 
     registerFile->setMemory(m_regMem);
 
+    // Exec way FP registers
+    idii_reg->rd_reg1_idx_exec_out >> fRegisterFile->r1_1_addr;
+    idii_reg->rd_reg2_idx_exec_out >> fRegisterFile->r2_1_addr;
+    memwb_reg->falures_out >> fRegisterFile->data_1_in;
+    memwb_reg->wr_reg_idx_out >> fRegisterFile->wr_1_addr;
+    memwb_reg->fp_reg_do_write_out >> fRegisterFile->wr_1_en;
+
+    // Data way FP registers
+    idii_reg->rd_reg1_idx_data_out >> fRegisterFile->r1_2_addr;
+    idii_reg->rd_reg2_idx_data_out >> fRegisterFile->r2_2_addr;
+    fp_reg_wr_src_data->out >> fRegisterFile->data_2_in;
+    memwb_reg->wr_reg_idx_data_out >> fRegisterFile->wr_2_addr;
+    memwb_reg->fp_reg_do_write_data_out >> fRegisterFile->wr_2_en;
+
+    fRegisterFile->setMemory(m_fRegMem);
+    fRegisterFile->setDisplayName("FP Registers");
+
     // -----------------------------------------------------------------------
     // Branch
     iiex_reg->br_op_out >> branch->comp_op;
@@ -302,10 +321,69 @@ public:
     iiex_reg->alu_ctrl_data_out >> alu_data->ctrl;
 
     // -----------------------------------------------------------------------
+    // FP ALUs
+    iiex_reg->f_r1_out >> exec_freg1_fw_src->get(ForwardingSrcDual::IdStage);
+    exmem_reg->falures_out >>
+        exec_freg1_fw_src->get(ForwardingSrcDual::MemStageExec);
+    exmem_reg->falures_data_out >>
+        exec_freg1_fw_src->get(ForwardingSrcDual::MemStageMem);
+    memwb_reg->falures_out >>
+        exec_freg1_fw_src->get(ForwardingSrcDual::WbStageExec);
+    fp_reg_wr_src_data->out >>
+        exec_freg1_fw_src->get(ForwardingSrcDual::WbStageMem);
+    funit->falu_reg1_fw_ctrl_exec >> exec_freg1_fw_src->select;
+
+    iiex_reg->f_r2_out >> exec_freg2_fw_src->get(ForwardingSrcDual::IdStage);
+    exmem_reg->falures_out >>
+        exec_freg2_fw_src->get(ForwardingSrcDual::MemStageExec);
+    exmem_reg->falures_data_out >>
+        exec_freg2_fw_src->get(ForwardingSrcDual::MemStageMem);
+    memwb_reg->falures_out >>
+        exec_freg2_fw_src->get(ForwardingSrcDual::WbStageExec);
+    fp_reg_wr_src_data->out >>
+        exec_freg2_fw_src->get(ForwardingSrcDual::WbStageMem);
+    funit->falu_reg2_fw_ctrl_exec >> exec_freg2_fw_src->select;
+
+    iiex_reg->f_r1_data_out >>
+        data_freg1_fw_src->get(ForwardingSrcDual::IdStage);
+    exmem_reg->falures_out >>
+        data_freg1_fw_src->get(ForwardingSrcDual::MemStageExec);
+    exmem_reg->falures_data_out >>
+        data_freg1_fw_src->get(ForwardingSrcDual::MemStageMem);
+    memwb_reg->falures_out >>
+        data_freg1_fw_src->get(ForwardingSrcDual::WbStageExec);
+    fp_reg_wr_src_data->out >>
+        data_freg1_fw_src->get(ForwardingSrcDual::WbStageMem);
+    funit->falu_reg1_fw_ctrl_data >> data_freg1_fw_src->select;
+
+    iiex_reg->f_r2_data_out >>
+        data_freg2_fw_src->get(ForwardingSrcDual::IdStage);
+    exmem_reg->falures_out >>
+        data_freg2_fw_src->get(ForwardingSrcDual::MemStageExec);
+    exmem_reg->falures_data_out >>
+        data_freg2_fw_src->get(ForwardingSrcDual::MemStageMem);
+    memwb_reg->falures_out >>
+        data_freg2_fw_src->get(ForwardingSrcDual::WbStageExec);
+    fp_reg_wr_src_data->out >>
+        data_freg2_fw_src->get(ForwardingSrcDual::WbStageMem);
+    funit->falu_reg2_fw_ctrl_data >> data_freg2_fw_src->select;
+
+    exec_freg1_fw_src->out >> falu->op1;
+    exec_freg2_fw_src->out >> falu->op2;
+    iiex_reg->opcode_out >> falu->opcode;
+
+    data_freg1_fw_src->out >> falu_data->op1;
+    data_freg2_fw_src->out >> falu_data->op2;
+    iiex_reg->opcode_data_out >> falu_data->opcode;
+
+    // -----------------------------------------------------------------------
     // Data memory
     exmem_reg->alures_data_out >> data_mem->addr;
     exmem_reg->mem_do_write_out >> data_mem->wr_en;
-    exmem_reg->r2_out >> data_mem->data_in;
+    exmem_reg->r2_out >> data_mem_wr_src->get(DataMemWrSrc::REG2);
+    exmem_reg->f_r2_data_out >> data_mem_wr_src->get(DataMemWrSrc::FREG2);
+    exmem_reg->data_mem_wr_src_ctrl_out >> data_mem_wr_src->select;
+    data_mem_wr_src->out >> data_mem->data_in;
     exmem_reg->mem_op_out >> data_mem->op;
     data_mem->mem->setMemory(m_memory);
 
@@ -322,6 +400,7 @@ public:
     pc_reg->out >> ifid_reg->pc_in;
     uncompress_dual->exp_instr1 >> ifid_reg->instr_in;
     uncompress_dual->exp_instr2 >> ifid_reg->instr2_in;
+    0 >> ifid_reg->instr_tag_in;
     fe_en_or->out >> ifid_reg->enable;
     efsc_or->out >> ifid_reg->clear;
     1 >> ifid_reg->valid_in; // Always valid unless register is cleared
@@ -370,6 +449,10 @@ public:
     registerFile->r2_1_out >> iiex_reg->r2_in;
     registerFile->r1_2_out >> iiex_reg->r1_data_in;
     registerFile->r2_2_out >> iiex_reg->r2_data_in;
+    fRegisterFile->r1_1_out >> iiex_reg->f_r1_in;
+    fRegisterFile->r2_1_out >> iiex_reg->f_r2_in;
+    fRegisterFile->r1_2_out >> iiex_reg->f_r1_data_in;
+    fRegisterFile->r2_2_out >> iiex_reg->f_r2_data_in;
 
     imm_exec->imm >> iiex_reg->imm_in;
     imm_data->imm >> iiex_reg->imm_data_in;
@@ -380,11 +463,13 @@ public:
                                        // RegWrSrcDual
     control->reg_wr_src_ctrl >> iiex_reg->reg_wr_src_ctrl_dual_in;
     control->reg_do_write_ctrl_exec >> iiex_reg->reg_do_write_in;
+    control->fp_reg_do_write_ctrl_exec >> iiex_reg->fp_reg_do_write_in;
     idii_reg->rd_reg1_idx_exec_out >> iiex_reg->rd_reg1_idx_in;
     idii_reg->rd_reg2_idx_exec_out >> iiex_reg->rd_reg2_idx_in;
     idii_reg->rd_reg1_idx_data_out >> iiex_reg->rd_reg1_idx_data_in;
     idii_reg->rd_reg2_idx_data_out >> iiex_reg->rd_reg2_idx_data_in;
     idii_reg->opcode_exec_out >> iiex_reg->opcode_in;
+    idii_reg->opcode_data_out >> iiex_reg->opcode_data_in;
 
     idii_reg->exec_valid_out >> control->exec_valid;
     idii_reg->data_valid_out >> control->data_valid;
@@ -401,21 +486,20 @@ public:
     control->reg_wr_src_data_ctrl >> iiex_reg->reg_wr_src_ctrl_data_in;
     control->mem_do_write_ctrl >> iiex_reg->mem_do_write_in;
     control->mem_ctrl >> iiex_reg->mem_op_in;
+    control->data_mem_wr_src_ctrl >> iiex_reg->data_mem_wr_src_ctrl_in;
     control->comp_ctrl >> iiex_reg->br_op_in;
     control->do_branch >> iiex_reg->do_br_in;
     control->do_jump >> iiex_reg->do_jmp_in;
 
     idii_reg->wr_reg_idx_data_out >> iiex_reg->wr_reg_idx_data_in;
     control->reg_do_write_ctrl_data >> iiex_reg->reg_do_write_data_in;
+    control->fp_reg_do_write_ctrl_data >> iiex_reg->fp_reg_do_write_data_in;
     control->mem_do_read_ctrl >> iiex_reg->mem_do_read_in;
 
     idii_reg->valid_out >> iiex_reg->valid_in;
     idii_reg->data_valid_out >> iiex_reg->data_valid_in;
     idii_reg->exec_valid_out >> iiex_reg->exec_valid_in;
-    0 >> iiex_reg->f_r1_in;
-    0 >> iiex_reg->f_r2_in;
-    0 >> iiex_reg->fp_reg_do_write_in;
-    0 >> iiex_reg->data_mem_wr_src_ctrl_in;
+    0 >> iiex_reg->instr_tag_in;
     0 >> iiex_reg->falu_ctrl_in;
 
     // -----------------------------------------------------------------------
@@ -435,6 +519,10 @@ public:
     data_reg2_fw_src->out >> exmem_reg->r2_in;
     alu->res >> exmem_reg->alures_in;
     alu_data->res >> exmem_reg->alures_data_in;
+    iiex_reg->f_r2_out >> exmem_reg->f_r2_in;
+    data_freg2_fw_src->out >> exmem_reg->f_r2_data_in;
+    falu->res >> exmem_reg->falures_in;
+    falu_data->res >> exmem_reg->falures_data_in;
 
     // Control
     0 >> exmem_reg->reg_wr_src_ctrl_in; // unused - we're using the specialized
@@ -446,16 +534,16 @@ public:
     iiex_reg->mem_do_write_out >> exmem_reg->mem_do_write_in;
     iiex_reg->mem_do_read_out >> exmem_reg->mem_do_read_in;
     iiex_reg->mem_op_out >> exmem_reg->mem_op_in;
+    iiex_reg->data_mem_wr_src_ctrl_out >> exmem_reg->data_mem_wr_src_ctrl_in;
+    iiex_reg->fp_reg_do_write_out >> exmem_reg->fp_reg_do_write_in;
     iiex_reg->reg_do_write_data_out >> exmem_reg->reg_do_write_data_in;
+    iiex_reg->fp_reg_do_write_data_out >>
+        exmem_reg->fp_reg_do_write_data_in;
     iiex_reg->wr_reg_idx_data_out >> exmem_reg->wr_reg_idx_data_in;
 
     iiex_reg->valid_out >> exmem_reg->valid_in;
     iiex_reg->data_valid_out >> exmem_reg->data_valid_in;
     iiex_reg->exec_valid_out >> exmem_reg->exec_valid_in;
-    0 >> exmem_reg->f_r2_in;
-    0 >> exmem_reg->falures_in;
-    0 >> exmem_reg->fp_reg_do_write_in;
-    0 >> exmem_reg->data_mem_wr_src_ctrl_in;
 
     // -----------------------------------------------------------------------
     // MEM/WB
@@ -470,13 +558,20 @@ public:
     memwb_reg->mem_read_out >> reg_wr_src_data->get(RegWrSrcDataDual::MEM);
     memwb_reg->reg_wr_src_ctrl_data_out >> reg_wr_src_data->select;
 
+    memwb_reg->falures_data_out >>
+        fp_reg_wr_src_data->get(RegWrSrcDataDual::ALURES);
+    memwb_reg->mem_read_out >> fp_reg_wr_src_data->get(RegWrSrcDataDual::MEM);
+    memwb_reg->reg_wr_src_ctrl_data_out >> fp_reg_wr_src_data->select;
+
     // Data
     exmem_reg->pc_out >> memwb_reg->pc_in;
     exmem_reg->pc_data_out >> memwb_reg->pc_data_in;
     exmem_reg->pc4_out >> memwb_reg->pc4_in;
     exmem_reg->alures_out >> memwb_reg->alures_in;
+    exmem_reg->falures_out >> memwb_reg->falures_in;
     data_mem->data_out >> memwb_reg->mem_read_in;
     exmem_reg->alures_data_out >> memwb_reg->alures_data_in;
+    exmem_reg->falures_data_out >> memwb_reg->falures_data_in;
 
     // Control
     0 >> memwb_reg->reg_wr_src_ctrl_in; // unused - we're using the specialized
@@ -485,14 +580,15 @@ public:
     exmem_reg->reg_wr_src_ctrl_data_out >> memwb_reg->reg_wr_src_ctrl_data_in;
     exmem_reg->wr_reg_idx_out >> memwb_reg->wr_reg_idx_in;
     exmem_reg->reg_do_write_out >> memwb_reg->reg_do_write_in;
+    exmem_reg->fp_reg_do_write_out >> memwb_reg->fp_reg_do_write_in;
     exmem_reg->reg_do_write_data_out >> memwb_reg->reg_do_write_data_in;
+    exmem_reg->fp_reg_do_write_data_out >>
+        memwb_reg->fp_reg_do_write_data_in;
     exmem_reg->wr_reg_idx_data_out >> memwb_reg->wr_reg_idx_data_in;
 
     exmem_reg->valid_out >> memwb_reg->valid_in;
     exmem_reg->data_valid_out >> memwb_reg->data_valid_in;
     exmem_reg->exec_valid_out >> memwb_reg->exec_valid_in;
-    0 >> memwb_reg->falures_in;
-    0 >> memwb_reg->fp_reg_do_write_in;
 
     // -----------------------------------------------------------------------
     // Forwarding unit
@@ -503,14 +599,18 @@ public:
 
     exmem_reg->wr_reg_idx_out >> funit->mem_reg_wr_idx_exec;
     exmem_reg->reg_do_write_out >> funit->mem_reg_wr_en_exec;
+    exmem_reg->fp_reg_do_write_out >> funit->mem_fp_reg_wr_en_exec;
     exmem_reg->wr_reg_idx_data_out >> funit->mem_reg_wr_idx_data;
     exmem_reg->reg_do_write_data_out >> funit->mem_reg_wr_en_data;
+    exmem_reg->fp_reg_do_write_data_out >> funit->mem_fp_reg_wr_en_data;
     exmem_reg->mem_op_out >> funit->mem_reg_mem_op;
 
     memwb_reg->wr_reg_idx_out >> funit->wb_reg_wr_idx_exec;
     memwb_reg->reg_do_write_out >> funit->wb_reg_wr_en_exec;
+    memwb_reg->fp_reg_do_write_out >> funit->wb_fp_reg_wr_en_exec;
     memwb_reg->wr_reg_idx_data_out >> funit->wb_reg_wr_idx_data;
     memwb_reg->reg_do_write_data_out >> funit->wb_reg_wr_en_data;
+    memwb_reg->fp_reg_do_write_data_out >> funit->wb_fp_reg_wr_en_data;
 
     // -----------------------------------------------------------------------
     // Hazard detection unit
@@ -533,8 +633,11 @@ public:
 
   // Design subcomponents
   SUBCOMPONENT(registerFile, TYPE(RegisterFile_DUAL<XLEN, true>));
+  SUBCOMPONENT(fRegisterFile, TYPE(FRegisterFile_DUAL<XLEN, true>));
   SUBCOMPONENT(alu, TYPE(ALU<XLEN>));
   SUBCOMPONENT(alu_data, TYPE(ALU<XLEN>));
+  SUBCOMPONENT(falu, TYPE(FALU_DUAL<XLEN>));
+  SUBCOMPONENT(falu_data, TYPE(FALU_DUAL<XLEN>));
   SUBCOMPONENT(control, Control_DUAL);
   SUBCOMPONENT(waycontrol, WayControl);
   SUBCOMPONENT(imm_exec, TYPE(Immediate<XLEN>));
@@ -561,6 +664,8 @@ public:
   // Multiplexers
   SUBCOMPONENT(reg_wr_src, TYPE(EnumMultiplexer<RegWrSrcDual, XLEN>));
   SUBCOMPONENT(reg_wr_src_data, TYPE(EnumMultiplexer<RegWrSrcDataDual, XLEN>));
+  SUBCOMPONENT(fp_reg_wr_src_data,
+               TYPE(EnumMultiplexer<RegWrSrcDataDual, XLEN>));
   SUBCOMPONENT(pc_src, TYPE(EnumMultiplexer<PcSrc, XLEN>));
   SUBCOMPONENT(alu_op1_exec_src, TYPE(EnumMultiplexer<AluSrc1, XLEN>));
   SUBCOMPONENT(alu_op2_exec_src, TYPE(EnumMultiplexer<AluSrc2, XLEN>));
@@ -575,6 +680,15 @@ public:
                TYPE(EnumMultiplexer<ForwardingSrcDual, XLEN>));
   SUBCOMPONENT(data_reg2_fw_src,
                TYPE(EnumMultiplexer<ForwardingSrcDual, XLEN>));
+  SUBCOMPONENT(exec_freg1_fw_src,
+               TYPE(EnumMultiplexer<ForwardingSrcDual, XLEN>));
+  SUBCOMPONENT(exec_freg2_fw_src,
+               TYPE(EnumMultiplexer<ForwardingSrcDual, XLEN>));
+  SUBCOMPONENT(data_freg1_fw_src,
+               TYPE(EnumMultiplexer<ForwardingSrcDual, XLEN>));
+  SUBCOMPONENT(data_freg2_fw_src,
+               TYPE(EnumMultiplexer<ForwardingSrcDual, XLEN>));
+  SUBCOMPONENT(data_mem_wr_src, TYPE(EnumMultiplexer<DataMemWrSrc, XLEN>));
 
   SUBCOMPONENT(data_way_pc, TYPE(EnumMultiplexer<WaySrc, XLEN>));
   SUBCOMPONENT(data_way_opcode,
@@ -631,6 +745,7 @@ public:
   // Address spaces
   ADDRESSSPACEMM(m_memory);
   ADDRESSSPACE(m_regMem);
+  ADDRESSSPACE(m_fRegMem);
 
   SUBCOMPONENT(ecallChecker, EcallChecker);
 
@@ -803,7 +918,10 @@ public:
     pc_reg->setInitValue(address);
   }
   AddressSpaceMM &getMemory() override { return *m_memory; }
-  VInt getRegister(const std::string_view &, unsigned i) const override {
+  VInt getRegister(const std::string_view &regFile, unsigned i) const override {
+    if (regFile == RVISA::FPR) {
+      return fRegisterFile->getRegister(i);
+    }
     return registerFile->getRegister(i);
   }
   void finalize(FinalizeReason fr) override {
@@ -844,7 +962,11 @@ public:
     return allStagesInvalid;
   }
 
-  void setRegister(const std::string_view &, unsigned i, VInt v) override {
+  void setRegister(const std::string_view &regFile, unsigned i, VInt v) override {
+    if (regFile == RVISA::FPR) {
+      setSynchronousValue(fRegisterFile->rf_1->_wr_mem, i, v);
+      return;
+    }
     setSynchronousValue(registerFile->rf_1->_wr_mem, i, v);
   }
 

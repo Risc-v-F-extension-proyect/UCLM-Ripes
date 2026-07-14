@@ -33,9 +33,9 @@ public:
   }
 
   void setLatencies(unsigned addSub, unsigned mul, unsigned div) {
-    m_addSubLatency = std::max(1u, addSub);
-    m_mulLatency = std::max(1u, mul);
-    m_divLatency = std::max(1u, div);
+    m_addSubLatency = std::max(2u, addSub);
+    m_mulLatency = std::max(3u, mul);
+    m_divLatency = std::max(4u, div);
   }
 
   INPUTPORT_ENUM(opcode, RVInstr);

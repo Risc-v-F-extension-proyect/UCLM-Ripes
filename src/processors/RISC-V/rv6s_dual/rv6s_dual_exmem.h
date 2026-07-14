@@ -20,6 +20,10 @@ public:
                                   this->enable);
     CONNECT_REGISTERED_CLEN_INPUT(pc_data, this->clear, this->enable);
     CONNECT_REGISTERED_CLEN_INPUT(alures_data, this->clear, this->enable);
+    CONNECT_REGISTERED_CLEN_INPUT(f_r2_data, this->clear, this->enable);
+    CONNECT_REGISTERED_CLEN_INPUT(falures_data, this->clear, this->enable);
+    CONNECT_REGISTERED_CLEN_INPUT(fp_reg_do_write_data, this->clear,
+                                  this->enable);
     CONNECT_REGISTERED_CLEN_INPUT(exec_valid, this->clear, this->enable);
     CONNECT_REGISTERED_CLEN_INPUT(data_valid, this->clear, this->enable);
   }
@@ -31,6 +35,9 @@ public:
   REGISTERED_CLEN_INPUT(pc_data, XLEN);
 
   REGISTERED_CLEN_INPUT(alures_data, XLEN);
+  REGISTERED_CLEN_INPUT(f_r2_data, XLEN);
+  REGISTERED_CLEN_INPUT(falures_data, XLEN);
+  REGISTERED_CLEN_INPUT(fp_reg_do_write_data, 1);
 
   REGISTERED_CLEN_INPUT(exec_valid, 1);
   REGISTERED_CLEN_INPUT(data_valid, 1);

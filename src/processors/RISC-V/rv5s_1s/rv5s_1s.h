@@ -7,6 +7,7 @@
 #include "VSRTL/core/vsrtl_multiplexer.h"
 
 #include "../../ripesvsrtlprocessor.h"
+#include "ripessettings.h"
 
 // Functional units
 #include "processors/RISC-V/riscv.h"
@@ -15,20 +16,27 @@
 #include "processors/RISC-V/rv_control.h"
 #include "processors/RISC-V/rv_decode.h"
 #include "processors/RISC-V/rv_ecallchecker.h"
+#include "processors/RISC-V/rv_falu.h"
+#include "processors/RISC-V/rv_fregisterfile.h"
 #include "processors/RISC-V/rv_immediate.h"
 #include "processors/RISC-V/rv_memory.h"
 #include "processors/RISC-V/rv_registerfile.h"
 #include "processors/RISC-V/rv_uncompress.h"
+#include "processors/RISC-V/rv_unified_reg_wr_src_adapter.h"
 
 // Stage separating registers
 #include "../rv5s_no_fw_hz/rv5s_no_fw_hz_ifid.h"
 #include "../rv5s/rv5s_exmem.h"
 #include "../rv5s/rv5s_idex.h"
 #include "../rv5s/rv5s_memwb.h"
+#include "../rv5s/rv_instruction_tag_generator.h"
+#include "../rv5s/rv_pending_instruction_window.h"
 
 // Forwarding & Hazard detection unit
 #include "rv5s_1s_forwardingunit.h"
 #include "rv5s_1s_hazardunit.h"
+
+#include <optional>
 
 namespace vsrtl {
 namespace core {
@@ -45,10 +53,30 @@ public:
   enum Stage { IF = 0, ID = 1, EX = 2, MEM = 3, WB = 4, STAGECOUNT };
   RV5S_1S(const QStringList &extensions)
       : RipesVSRTLProcessor(
-            "5-Stage RISC-V Processor (1-slot delayed branch)") {
+            "5-Stage RISC-V Processor (1-slot predict-not-taken)") {
     m_enabledISA = ISAInfoRegistry::getISA<XLenToRVISA<XLEN>()>(extensions);
     decode->setISA(m_enabledISA);
     uncompress->setISA(m_enabledISA);
+    falu->setConfiguration(
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_MUL_LATENCY).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_DIV_LATENCY).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_ADDSUB_COUNT).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_MUL_COUNT).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_DIV_COUNT).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_ADDSUB_PIPELINED).toBool(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_MUL_PIPELINED).toBool(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_DIV_PIPELINED).toBool());
+    pending_instruction_window->setConfiguration(
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_MUL_LATENCY).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_DIV_LATENCY).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_ADDSUB_COUNT).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_MUL_COUNT).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_DIV_COUNT).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_ADDSUB_PIPELINED).toBool(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_MUL_PIPELINED).toBool(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_DIV_PIPELINED).toBool());
 
     // -----------------------------------------------------------------------
     // Program counter
@@ -56,7 +84,8 @@ public:
     pc_inc->out >> pc_4->op2;
     pc_src->out >> pc_reg->in;
     0 >> pc_reg->clear;
-    hzunit->hazardFEEnable >> pc_reg->enable;
+    fe_window_enable_and->out >> pc_reg->enable;
+    fe_window_enable_and->out >> instruction_tag_generator->enable_in;
 
     2 >> pc_inc->get(PcInc::INC2);
     4 >> pc_inc->get(PcInc::INC4);
@@ -65,20 +94,29 @@ public:
     // Note: pc_src works uses the PcSrc enum, but is selected by the boolean
     // signal from the controlflow OR gate. PcSrc enum values must adhere to the
     // boolean 0/1 values.
+    // In the 1-slot predict-not-taken variant, branch/jump resolution remains
+    // in ID. A taken control-flow instruction redirects the next fetch and
+    // clears only the younger instruction currently in IF/ID.
     controlflow_or->out >> pc_src->select;
-
     controlflow_or->out >> *efsc_or->in[0];
     ecallChecker->syscallExit >> *efsc_or->in[1];
 
-    // MODIFIED: disconnect efsc_or from efschz_or
+    // MODIFIED: disconnect efsc_or from efschz_or. Control-flow clears only
+    // IF/ID for the 1-slot branch model; ID/EX is cleared by syscall, hazards
+    // or pending-instruction-window backpressure.
     // efsc_or->out >> *efschz_or->in[0];
     ecallChecker->syscallExit >> *efschz_or->in[0];
     hzunit->hazardIDEXClear >> *efschz_or->in[1];
+    window_ready_not->out >> *efschz_or->in[2];
 
     // -----------------------------------------------------------------------
     // Instruction memory
     pc_reg->out >> instr_mem->addr;
     instr_mem->setMemory(m_memory);
+
+    // -----------------------------------------------------------------------
+    // Instruction tag
+    instruction_tag_generator->instr_tag >> ifid_reg->instr_tag_in;
 
     // -----------------------------------------------------------------------
     // Decode
@@ -101,12 +139,25 @@ public:
 
     memwb_reg->wr_reg_idx_out >> registerFile->wr_addr;
     memwb_reg->reg_do_write_out >> registerFile->wr_en;
-    memwb_reg->mem_read_out >> reg_wr_src->get(RegWrSrc::MEMREAD);
-    memwb_reg->alures_out >> reg_wr_src->get(RegWrSrc::ALURES);
-    memwb_reg->pc4_out >> reg_wr_src->get(RegWrSrc::PC4);
-    memwb_reg->reg_wr_src_ctrl_out >> reg_wr_src->select;
+    memwb_reg->mem_read_out >> reg_wr_src->get(UnifiedRegWrSrc::MEMREAD);
+    memwb_reg->alures_out >> reg_wr_src->get(UnifiedRegWrSrc::ALURES);
+    memwb_reg->pc4_out >> reg_wr_src->get(UnifiedRegWrSrc::PC4);
+    memwb_reg->falures_out >> reg_wr_src->get(UnifiedRegWrSrc::FALURES);
+    memwb_reg->reg_wr_src_ctrl_out >> reg_wr_src_adapter->reg_wr_src;
+    memwb_reg->fp_reg_do_write_out >> reg_wr_src_adapter->fp_reg_do_write;
+    reg_wr_src_adapter->out >> reg_wr_src->select;
 
     registerFile->setMemory(m_regMem);
+
+    decode->r1_reg_idx >> fRegisterFile->r1_addr;
+    decode->r2_reg_idx >> fRegisterFile->r2_addr;
+    0 >> fRegisterFile->r3_addr;
+    reg_wr_src->out >> fRegisterFile->data_in;
+
+    memwb_reg->wr_reg_idx_out >> fRegisterFile->wr_addr;
+    memwb_reg->fp_reg_do_write_out >> fRegisterFile->wr_en;
+    fRegisterFile->setMemory(m_fRegMem);
+    fRegisterFile->setDisplayName("FP Registers");
 
     // -----------------------------------------------------------------------
     // Branch
@@ -133,22 +184,22 @@ public:
     // idex_reg->br_op_out >> branch->comp_op;
     // reg1_fw_src->out >> branch->op1;
     // reg2_fw_src->out >> branch->op2;
-    control->comp_ctrl >> branch->comp_op; //
-    branch_op1_src->out >> branch->op1;    //
-    branch_op2_src->out >> branch->op2;    // MODIFIED
+    control->comp_ctrl >> branch->comp_op;
+    branch_op1_src->out >> branch->op1;
+    branch_op2_src->out >> branch->op2;
 
     branch->res >> *br_and->in[0];
-    br_and->out >> *controlflow_or->in[0];
     // idex_reg->do_br_out >> *br_and->in[1];
     // idex_reg->do_jmp_out >> *controlflow_or->in[1];
-    control->do_branch >> *br_and->in[1];       //
-    control->do_jump >> *controlflow_or->in[1]; // MODIFIED
+    control->do_branch >> *br_and->in[1];
+    br_and->out >> *controlflow_or->in[0];
+    control->do_jump >> *controlflow_or->in[1];
 
     // MODIFIED: get branch target address from dedicated adder
     // alu->res >> pc_src->get(PcSrc::ALU);
     jump_addr_src->out >> branch_adder->op1;
     immediate->imm >> branch_adder->op2;
-    branch_adder->out >> pc_src->get(PcSrc::ALU); // MODIFIED
+    branch_adder->out >> pc_src->get(PcSrc::ALU);
     pc_4->out >> pc_src->get(PcSrc::PC4);
 
     // -----------------------------------------------------------------------
@@ -183,26 +234,63 @@ public:
     idex_reg->alu_ctrl_out >> alu->ctrl;
 
     // -----------------------------------------------------------------------
+    // FALU
+    idex_reg->f_r1_out >> freg1_fw_src->get(ForwardingSrc::IdStage);
+    exmem_reg->falures_out >> freg1_fw_src->get(ForwardingSrc::MemStage);
+    reg_wr_src->out >> freg1_fw_src->get(ForwardingSrc::WbStage);
+    funit->falu_reg1_forwarding_ctrl >> freg1_fw_src->select;
+
+    idex_reg->f_r2_out >> freg2_fw_src->get(ForwardingSrc::IdStage);
+    exmem_reg->falures_out >> freg2_fw_src->get(ForwardingSrc::MemStage);
+    reg_wr_src->out >> freg2_fw_src->get(ForwardingSrc::WbStage);
+    funit->falu_reg2_forwarding_ctrl >> freg2_fw_src->select;
+
+    freg1_fw_src->out >> falu->op1;
+    freg2_fw_src->out >> falu->op2;
+    0 >> falu->op3;
+    idex_reg->falu_ctrl_out >> falu->ctrl;
+    idex_reg->wr_reg_idx_out >> falu->rd_idx_in;
+    idex_reg->instr_tag_out >> falu->instr_tag_in;
+    idex_reg->valid_out >> falu->enable_in;
+    0 >> falu->bypass_in;
+    pending_instruction_window->falu_release_out >> falu->accepted_in;
+
+    // -----------------------------------------------------------------------
     // Data memory
     exmem_reg->alures_out >> data_mem->addr;
     exmem_reg->mem_do_write_out >> data_mem->wr_en;
-    exmem_reg->r2_out >> data_mem->data_in;
+    exmem_reg->r2_out >> data_mem_wr_src->get(DataMemWrSrc::REG2);
+    exmem_reg->f_r2_out >> data_mem_wr_src->get(DataMemWrSrc::FREG2);
+    exmem_reg->data_mem_wr_src_ctrl_out >> data_mem_wr_src->select;
+    data_mem_wr_src->out >> data_mem->data_in;
     exmem_reg->mem_op_out >> data_mem->op;
     data_mem->mem->setMemory(m_memory);
 
     // -----------------------------------------------------------------------
     // Ecall checker
 
+    idex_reg->opcode_out >> pending_instruction_window->opcode_in;
     idex_reg->opcode_out >> ecallChecker->opcode;
     ecallChecker->setSyscallCallback(&trapHandler);
     hzunit->stallEcallHandling >> ecallChecker->stallEcallHandling;
+
+    // -----------------------------------------------------------------------
+    // Hazard unit communication with Pending Instruction Window
+    decode->r1_reg_idx >> pending_instruction_window->id_reg1_idx_in;
+    decode->r2_reg_idx >> pending_instruction_window->id_reg2_idx_in;
+    decode->opcode >> pending_instruction_window->id_opcode_in;
+    hzunit->hazardFEEnable >> *fe_window_enable_and->in[0];
+    pending_instruction_window->windowReady >> *fe_window_enable_and->in[1];
+    pending_instruction_window->windowReady >> *window_ready_not->in[0];
+    hzunit->hazardIDEXClear >> *idex_stalled_or->in[0];
+    window_ready_not->out >> *idex_stalled_or->in[1];
 
     // -----------------------------------------------------------------------
     // IF/ID
     pc_4->out >> ifid_reg->pc4_in;
     pc_reg->out >> ifid_reg->pc_in;
     uncompress->exp_instr >> ifid_reg->instr_in;
-    hzunit->hazardFEEnable >> ifid_reg->enable;
+    fe_window_enable_and->out >> ifid_reg->enable;
     efsc_or->out >> ifid_reg->clear;
     1 >> ifid_reg->valid_in; // Always valid unless register is cleared
 
@@ -213,7 +301,7 @@ public:
     // -----------------------------------------------------------------------
     // ID/EX
     hzunit->hazardIDEXEnable >> idex_reg->enable;
-    hzunit->hazardIDEXClear >> idex_reg->stalled_in;
+    idex_stalled_or->out >> idex_reg->stalled_in;
     efschz_or->out >> idex_reg->clear;
 
     // Data
@@ -221,7 +309,10 @@ public:
     ifid_reg->pc_out >> idex_reg->pc_in;
     registerFile->r1_out >> idex_reg->r1_in;
     registerFile->r2_out >> idex_reg->r2_in;
+    fRegisterFile->r1_out >> idex_reg->f_r1_in;
+    fRegisterFile->r2_out >> idex_reg->f_r2_in;
     immediate->imm >> idex_reg->imm_in;
+    ifid_reg->instr_tag_out >> idex_reg->instr_tag_in;
 
     // Control
     decode->wr_reg_idx >> idex_reg->wr_reg_idx_in;
@@ -239,41 +330,75 @@ public:
     decode->r2_reg_idx >> idex_reg->rd_reg2_idx_in;
     decode->opcode >> idex_reg->opcode_in;
     control->mem_do_read_ctrl >> idex_reg->mem_do_read_in;
-    0 >> idex_reg->f_r1_in;
-    0 >> idex_reg->f_r2_in;
-    0 >> idex_reg->fp_reg_do_write_in;
-    0 >> idex_reg->data_mem_wr_src_ctrl_in;
-    0 >> idex_reg->falu_ctrl_in;
+    control->fp_reg_do_write_ctrl >> idex_reg->fp_reg_do_write_in;
+    control->data_mem_wr_src_ctrl >> idex_reg->data_mem_wr_src_ctrl_in;
+    control->falu_ctrl >> idex_reg->falu_ctrl_in;
 
     ifid_reg->valid_out >> idex_reg->valid_in;
 
     // -----------------------------------------------------------------------
     // EX/MEM
-    1 >> exmem_reg->enable;
-    hzunit->hazardEXMEMClear >> exmem_reg->clear;
     hzunit->hazardEXMEMClear >> *mem_stalled_or->in[0];
     idex_reg->stalled_out >> *mem_stalled_or->in[1];
-    mem_stalled_or->out >> exmem_reg->stalled_in;
+    mem_stalled_or->out >> pending_instruction_window->stalled_in;
 
     // Data
-    idex_reg->pc_out >> exmem_reg->pc_in;
-    idex_reg->pc4_out >> exmem_reg->pc4_in;
-    reg2_fw_src->out >> exmem_reg->r2_in;
-    alu->res >> exmem_reg->alures_in;
+    idex_reg->pc_out >> pending_instruction_window->pc_in;
+    idex_reg->pc4_out >> pending_instruction_window->pc4_in;
+    idex_reg->instr_tag_out >> pending_instruction_window->instr_tag_in;
+    reg2_fw_src->out >> pending_instruction_window->r2_in;
+    alu->res >> pending_instruction_window->alures_in;
+    freg2_fw_src->out >> pending_instruction_window->f_r2_in;
+    falu->res >> pending_instruction_window->falures_in;
+    falu->res >> pending_instruction_window->falu_result_in;
+    falu->instr_tag_out >> pending_instruction_window->falu_result_tag_in;
+    falu->valid_out >> pending_instruction_window->falu_result_valid_in;
 
     // Control
-    idex_reg->reg_wr_src_ctrl_out >> exmem_reg->reg_wr_src_ctrl_in;
-    idex_reg->wr_reg_idx_out >> exmem_reg->wr_reg_idx_in;
-    idex_reg->reg_do_write_out >> exmem_reg->reg_do_write_in;
-    idex_reg->mem_do_write_out >> exmem_reg->mem_do_write_in;
-    idex_reg->mem_do_read_out >> exmem_reg->mem_do_read_in;
-    idex_reg->mem_op_out >> exmem_reg->mem_op_in;
+    idex_reg->reg_wr_src_ctrl_out >>
+        pending_instruction_window->reg_wr_src_ctrl_in;
+    idex_reg->wr_reg_idx_out >> pending_instruction_window->wr_reg_idx_in;
+    idex_reg->reg_do_write_out >>
+        pending_instruction_window->reg_do_write_in;
+    idex_reg->mem_do_write_out >>
+        pending_instruction_window->mem_do_write_in;
+    idex_reg->mem_do_read_out >> pending_instruction_window->mem_do_read_in;
+    idex_reg->mem_op_out >> pending_instruction_window->mem_op_in;
+    idex_reg->fp_reg_do_write_out >>
+        pending_instruction_window->fp_reg_do_write_in;
+    idex_reg->data_mem_wr_src_ctrl_out >>
+        pending_instruction_window->data_mem_wr_src_ctrl_in;
+    idex_reg->falu_ctrl_out >> pending_instruction_window->falu_ctrl_in;
+    idex_reg->valid_out >> pending_instruction_window->valid_in;
+    0 >> pending_instruction_window->do_branch_in;
+    0 >> pending_instruction_window->controlflow_flush_in;
 
-    idex_reg->valid_out >> exmem_reg->valid_in;
-    0 >> exmem_reg->f_r2_in;
-    0 >> exmem_reg->falures_in;
-    0 >> exmem_reg->fp_reg_do_write_in;
-    0 >> exmem_reg->data_mem_wr_src_ctrl_in;
+    1 >> exmem_reg->enable;
+    hzunit->hazardEXMEMClear >> exmem_reg->clear;
+    pending_instruction_window->stalled_out >> exmem_reg->stalled_in;
+
+    // Data
+    pending_instruction_window->pc_out >> exmem_reg->pc_in;
+    pending_instruction_window->pc4_out >> exmem_reg->pc4_in;
+    pending_instruction_window->r2_out >> exmem_reg->r2_in;
+    pending_instruction_window->alures_out >> exmem_reg->alures_in;
+    pending_instruction_window->f_r2_out >> exmem_reg->f_r2_in;
+    pending_instruction_window->falures_out >> exmem_reg->falures_in;
+
+    // Control
+    pending_instruction_window->reg_wr_src_ctrl_out >>
+        exmem_reg->reg_wr_src_ctrl_in;
+    pending_instruction_window->wr_reg_idx_out >> exmem_reg->wr_reg_idx_in;
+    pending_instruction_window->reg_do_write_out >> exmem_reg->reg_do_write_in;
+    pending_instruction_window->mem_do_write_out >>
+        exmem_reg->mem_do_write_in;
+    pending_instruction_window->mem_do_read_out >> exmem_reg->mem_do_read_in;
+    pending_instruction_window->mem_op_out >> exmem_reg->mem_op_in;
+    pending_instruction_window->fp_reg_do_write_out >>
+        exmem_reg->fp_reg_do_write_in;
+    pending_instruction_window->data_mem_wr_src_ctrl_out >>
+        exmem_reg->data_mem_wr_src_ctrl_in;
+    pending_instruction_window->valid_out >> exmem_reg->valid_in;
 
     // -----------------------------------------------------------------------
     // MEM/WB
@@ -284,16 +409,16 @@ public:
     exmem_reg->pc_out >> memwb_reg->pc_in;
     exmem_reg->pc4_out >> memwb_reg->pc4_in;
     exmem_reg->alures_out >> memwb_reg->alures_in;
+    exmem_reg->falures_out >> memwb_reg->falures_in;
     data_mem->data_out >> memwb_reg->mem_read_in;
 
     // Control
     exmem_reg->reg_wr_src_ctrl_out >> memwb_reg->reg_wr_src_ctrl_in;
     exmem_reg->wr_reg_idx_out >> memwb_reg->wr_reg_idx_in;
     exmem_reg->reg_do_write_out >> memwb_reg->reg_do_write_in;
+    exmem_reg->fp_reg_do_write_out >> memwb_reg->fp_reg_do_write_in;
 
     exmem_reg->valid_out >> memwb_reg->valid_in;
-    0 >> memwb_reg->falures_in;
-    0 >> memwb_reg->fp_reg_do_write_in;
 
     // -----------------------------------------------------------------------
     // Forwarding unit
@@ -310,13 +435,14 @@ public:
 
     memwb_reg->wr_reg_idx_out >> funit->wb_reg_wr_idx;
     memwb_reg->reg_do_write_out >> funit->wb_reg_wr_en;
-    0 >> funit->mem_fp_reg_wr_en;
-    0 >> funit->wb_fp_reg_wr_en;
+    exmem_reg->fp_reg_do_write_out >> funit->mem_fp_reg_wr_en;
+    memwb_reg->fp_reg_do_write_out >> funit->wb_fp_reg_wr_en;
 
     // -----------------------------------------------------------------------
     // Hazard detection unit
     decode->r1_reg_idx >> hzunit->id_reg1_idx;
     decode->r2_reg_idx >> hzunit->id_reg2_idx;
+    decode->opcode >> hzunit->id_opcode;
 
     // MODIFIED: data hazard detection for branch operands
     exmem_reg->mem_do_read_out >> hzunit->mem_do_mem_read_en;
@@ -327,17 +453,23 @@ public:
 
     idex_reg->mem_do_read_out >> hzunit->ex_do_mem_read_en;
     idex_reg->wr_reg_idx_out >> hzunit->ex_reg_wr_idx;
+    idex_reg->reg_do_write_out >> hzunit->ex_do_reg_write_en;
+    idex_reg->fp_reg_do_write_out >> hzunit->ex_do_fp_write_en;
 
     exmem_reg->reg_do_write_out >> hzunit->mem_do_reg_write;
+    exmem_reg->fp_reg_do_write_out >> hzunit->fp_mem_do_reg_write;
 
     memwb_reg->reg_do_write_out >> hzunit->wb_do_reg_write;
+    memwb_reg->fp_reg_do_write_out >> hzunit->fp_wb_do_reg_write;
 
     idex_reg->opcode_out >> hzunit->opcode;
   }
 
   // Design subcomponents
   SUBCOMPONENT(registerFile, TYPE(RegisterFile<XLEN, true>));
+  SUBCOMPONENT(fRegisterFile, TYPE(FRegisterFile<XLEN, true>));
   SUBCOMPONENT(alu, TYPE(ALU<XLEN>));
+  SUBCOMPONENT(falu, TYPE(FALU<XLEN>));
   SUBCOMPONENT(control, Control);
   SUBCOMPONENT(immediate, TYPE(Immediate<XLEN>));
   SUBCOMPONENT(decode, TYPE(Decode<XLEN>));
@@ -352,16 +484,22 @@ public:
   // Stage seperating registers
   SUBCOMPONENT(ifid_reg, TYPE(IFID<XLEN>));
   SUBCOMPONENT(idex_reg, TYPE(RV5S_IDEX<XLEN>));
+  SUBCOMPONENT(pending_instruction_window, TYPE(PendingInstructionWindow<XLEN>));
+  SUBCOMPONENT(instruction_tag_generator, TYPE(InstructionTagGenerator<XLEN>));
   SUBCOMPONENT(exmem_reg, TYPE(RV5S_EXMEM<XLEN>));
   SUBCOMPONENT(memwb_reg, TYPE(RV5S_MEMWB<XLEN>));
 
   // Multiplexers
-  SUBCOMPONENT(reg_wr_src, TYPE(EnumMultiplexer<RegWrSrc, XLEN>));
+  SUBCOMPONENT(reg_wr_src, TYPE(EnumMultiplexer<UnifiedRegWrSrc, XLEN>));
+  SUBCOMPONENT(reg_wr_src_adapter, UnifiedRegWrSrcAdapter);
   SUBCOMPONENT(pc_src, TYPE(EnumMultiplexer<PcSrc, XLEN>));
   SUBCOMPONENT(alu_op1_src, TYPE(EnumMultiplexer<AluSrc1, XLEN>));
   SUBCOMPONENT(alu_op2_src, TYPE(EnumMultiplexer<AluSrc2, XLEN>));
   SUBCOMPONENT(reg1_fw_src, TYPE(EnumMultiplexer<ForwardingSrc, XLEN>));
   SUBCOMPONENT(reg2_fw_src, TYPE(EnumMultiplexer<ForwardingSrc, XLEN>));
+  SUBCOMPONENT(freg1_fw_src, TYPE(EnumMultiplexer<ForwardingSrc, XLEN>));
+  SUBCOMPONENT(freg2_fw_src, TYPE(EnumMultiplexer<ForwardingSrc, XLEN>));
+  SUBCOMPONENT(data_mem_wr_src, TYPE(EnumMultiplexer<DataMemWrSrc, XLEN>));
   SUBCOMPONENT(pc_inc, TYPE(EnumMultiplexer<PcInc, XLEN>));
   // MODIFIED: branch operand forwarding multiplexers
   SUBCOMPONENT(branch_op1_src, TYPE(EnumMultiplexer<ForwardingSrc_1S, XLEN>));
@@ -384,79 +522,116 @@ public:
   SUBCOMPONENT(controlflow_or, TYPE(Or<1, 2>));
   // True if controlflow action or performing syscall finishing
   SUBCOMPONENT(efsc_or, TYPE(Or<1, 2>));
-  // True if performing syscall finishing or stalling due to load-use hazard
-  SUBCOMPONENT(efschz_or, TYPE(Or<1, 2>));
-
+  // True if performing syscall finishing, stalling due to load-use hazard or
+  // waiting on pending-instruction-window availability.
+  SUBCOMPONENT(efschz_or, TYPE(Or<1, 3>));
   SUBCOMPONENT(mem_stalled_or, TYPE(Or<1, 2>));
+  SUBCOMPONENT(fe_window_enable_and, TYPE(And<1, 2>));
+  SUBCOMPONENT(window_ready_not, TYPE(Not<1, 1>));
+  SUBCOMPONENT(idex_stalled_or, TYPE(Or<1, 2>));
 
   // Address spaces
   ADDRESSSPACEMM(m_memory);
   ADDRESSSPACE(m_regMem);
+  ADDRESSSPACE(m_fRegMem);
 
   SUBCOMPONENT(ecallChecker, EcallChecker);
 
   // Ripes interface compliance
   const ProcessorStructure &structure() const override { return m_structure; }
   unsigned int getPcForStage(StageIndex idx) const override {
-    // clang-format off
-        switch (idx.index()) {
-            case IF: return pc_reg->out.uValue();
-            case ID: return ifid_reg->pc_out.uValue();
-            case EX: return idex_reg->pc_out.uValue();
-            case MEM: return exmem_reg->pc_out.uValue();
-            case WB: return memwb_reg->pc_out.uValue();
-            default: assert(false && "Processor does not contain stage");
-        }
-        Q_UNREACHABLE();
-    // clang-format on
+    switch (idx.index()) {
+    case IF:
+      return pc_reg->out.uValue();
+    case ID:
+      return ifid_reg->pc_out.uValue();
+    case EX:
+      return idex_reg->pc_out.uValue();
+    case MEM:
+      return exmem_reg->pc_out.uValue();
+    case WB:
+      return memwb_reg->pc_out.uValue();
+    default:
+      assert(false && "Processor does not contain stage");
+    }
+    Q_UNREACHABLE();
   }
   AInt nextFetchedAddress() const override { return pc_src->out.uValue(); }
   QString stageName(StageIndex idx) const override {
-    // clang-format off
-        switch (idx.index()) {
-            case IF: return "IF";
-            case ID: return "ID";
-            case EX: return "EX";
-            case MEM: return "MEM";
-            case WB: return "WB";
-            default: assert(false && "Processor does not contain stage");
-        }
-        Q_UNREACHABLE();
-    // clang-format on
+    switch (idx.index()) {
+    case IF:
+      return "IF";
+    case ID:
+      return "ID";
+    case EX:
+      return "EX";
+    case MEM:
+      return "MEM";
+    case WB:
+      return "WB";
+    default:
+      assert(false && "Processor does not contain stage");
+    }
+    Q_UNREACHABLE();
   }
   StageInfo stageInfo(StageIndex stage) const override {
     bool stageValid = true;
     // Has the pipeline stage been filled?
     stageValid &= stage.index() <= m_cycleCount;
 
-    // clang-format off
-        // Has the stage been cleared?
-        switch(stage.index()){
-        case ID: stageValid &= ifid_reg->valid_out.uValue(); break;
-        case EX: stageValid &= idex_reg->valid_out.uValue(); break;
-        case MEM: stageValid &= exmem_reg->valid_out.uValue(); break;
-        case WB: stageValid &= memwb_reg->valid_out.uValue(); break;
-        default: case IF: break;
-        }
+    // Has the stage been cleared?
+    switch (stage.index()) {
+    case ID:
+      stageValid &= ifid_reg->valid_out.uValue();
+      break;
+    case EX:
+      stageValid &= idex_reg->valid_out.uValue();
+      break;
+    case MEM:
+      stageValid &= exmem_reg->valid_out.uValue();
+      break;
+    case WB:
+      stageValid &= memwb_reg->valid_out.uValue();
+      break;
+    default:
+    case IF:
+      break;
+    }
 
-        // Is the stage carrying a valid (executable) PC?
-        switch(stage.index()){
-        case ID: stageValid &= isExecutableAddress(ifid_reg->pc_out.uValue()); break;
-        case EX: stageValid &= isExecutableAddress(idex_reg->pc_out.uValue()); break;
-        case MEM: stageValid &= isExecutableAddress(exmem_reg->pc_out.uValue()); break;
-        case WB: stageValid &= isExecutableAddress(memwb_reg->pc_out.uValue()); break;
-        default: case IF: stageValid &= isExecutableAddress(pc_reg->out.uValue()); break;
-        }
+    // Is the stage carrying a valid (executable) PC?
+    switch (stage.index()) {
+    case ID:
+      stageValid &= isExecutableAddress(ifid_reg->pc_out.uValue());
+      break;
+    case EX:
+      stageValid &= isExecutableAddress(idex_reg->pc_out.uValue());
+      break;
+    case MEM:
+      stageValid &= isExecutableAddress(exmem_reg->pc_out.uValue());
+      break;
+    case WB:
+      stageValid &= isExecutableAddress(memwb_reg->pc_out.uValue());
+      break;
+    default:
+    case IF:
+      stageValid &= isExecutableAddress(pc_reg->out.uValue());
+      break;
+    }
 
-        // Are we currently clearing the pipeline due to a syscall exit?
-		// if such, all stages before the EX stage are invalid
-        if(stage.index() < EX){
-            stageValid &= !ecallChecker->isSysCallExiting();
-        }
-    // clang-format on
+    // Are we currently clearing the pipeline due to a syscall exit?
+    // if such, all stages before the EX stage are invalid
+    if (stage.index() < EX) {
+      stageValid &= !ecallChecker->isSysCallExiting();
+    }
 
     // Gather stage state info
     StageInfo::State state = StageInfo ::State::None;
+    QString namedState;
+    if (stage.index() == EX && idex_reg->valid_out.uValue() != 0 &&
+        Control::isFALUInstr(
+            static_cast<RVInstr>(idex_reg->opcode_out.uValue()))) {
+      stageValid = false;
+    }
     switch (stage.index()) {
     case IF:
       break;
@@ -465,23 +640,21 @@ public:
         state = StageInfo::State::Flushed;
       }
       break;
-    case EX: {
+    case EX:
       if (idex_reg->stalled_out.uValue() == 1) {
         state = StageInfo::State::Stalled;
       } else if (m_cycleCount > EX && idex_reg->valid_out.uValue() == 0) {
         state = StageInfo::State::Flushed;
       }
       break;
-    }
-    case MEM: {
+    case MEM:
       if (exmem_reg->stalled_out.uValue() == 1) {
         state = StageInfo::State::Stalled;
       } else if (m_cycleCount > MEM && exmem_reg->valid_out.uValue() == 0) {
         state = StageInfo::State::Flushed;
       }
       break;
-    }
-    case WB: {
+    case WB:
       if (memwb_reg->stalled_out.uValue() == 1) {
         state = StageInfo::State::Stalled;
       } else if (m_cycleCount > WB && memwb_reg->valid_out.uValue() == 0) {
@@ -489,9 +662,69 @@ public:
       }
       break;
     }
+
+    return StageInfo({getPcForStage(stage), stageValid, state, namedState});
+  }
+
+  std::vector<std::pair<StageIndex, StageInfo>>
+  additionalStageInfos() const override {
+    std::vector<std::pair<StageIndex, StageInfo>> result;
+    const auto entries = falu->pipelineDiagramEntries();
+    result.reserve(entries.size());
+
+    for (unsigned slot = 0; slot < entries.size(); ++slot) {
+      const auto &entry = entries.at(slot);
+      StageInfo info{0, false, StageInfo::State::None, ""};
+      if (entry.valid) {
+        std::optional<VSRTL_VT_U> pc;
+        if (idex_reg->valid_out.uValue() != 0 &&
+            idex_reg->instr_tag_out.uValue() == entry.instrTag) {
+          pc = idex_reg->pc_out.uValue();
+        } else {
+          pc = pending_instruction_window->pcForTag(entry.instrTag);
+        }
+
+        if (pc && isExecutableAddress(*pc)) {
+          const QChar unitName =
+              entry.unitType == 0 ? 'A' : entry.unitType == 1 ? 'M' : 'D';
+          info = StageInfo{*pc, true, StageInfo::State::None,
+                           QString("%1%2").arg(unitName).arg(entry.stage + 1)};
+        }
+      }
+      result.push_back({StageIndex{slot + 1, 0}, info});
+    }
+    return result;
+  }
+
+  std::vector<FPUnicicleStageInfo> fpUnicicleStageInfos() const override {
+    std::vector<FPUnicicleStageInfo> result;
+    const auto entries = falu->pipelineDiagramEntries();
+    result.reserve(entries.size() + 1);
+
+    const auto exOpcode = static_cast<RVInstr>(idex_reg->opcode_out.uValue());
+    if (idex_reg->valid_out.uValue() != 0 && exOpcode != RVInstr::NOP &&
+        !Control::isFALUInstr(exOpcode) &&
+        isExecutableAddress(idex_reg->pc_out.uValue())) {
+      result.push_back({true, idex_reg->pc_out.uValue(), 0, 0});
     }
 
-    return StageInfo({getPcForStage(stage), stageValid, state});
+    for (const auto &entry : entries) {
+      if (!entry.valid) {
+        continue;
+      }
+
+      std::optional<VSRTL_VT_U> pc;
+      if (idex_reg->valid_out.uValue() != 0 &&
+          idex_reg->instr_tag_out.uValue() == entry.instrTag) {
+        pc = idex_reg->pc_out.uValue();
+      } else {
+        pc = pending_instruction_window->pcForTag(entry.instrTag);
+      }
+
+      result.push_back({true, pc.value_or(0), entry.unit + 1, entry.stage});
+    }
+
+    return result;
   }
 
   void setProgramCounter(AInt address) override {
@@ -502,7 +735,10 @@ public:
     pc_reg->setInitValue(address);
   }
   AddressSpaceMM &getMemory() override { return *m_memory; }
-  VInt getRegister(const std::string_view &, unsigned i) const override {
+  VInt getRegister(const std::string_view &regFile, unsigned i) const override {
+    if (regFile == RVISA::FPR) {
+      return fRegisterFile->getRegister(i);
+    }
     return registerFile->getRegister(i);
   }
   void finalize(FinalizeReason fr) override {
@@ -534,13 +770,18 @@ public:
     bool allStagesInvalid = true;
     for (int stage = IF; stage < STAGECOUNT; stage++) {
       allStagesInvalid &= !stageInfo({0, stage}).stage_valid;
-      if (!allStagesInvalid)
+      if (!allStagesInvalid) {
         break;
+      }
     }
     return allStagesInvalid;
   }
 
-  void setRegister(const std::string_view &, unsigned i, VInt v) override {
+  void setRegister(const std::string_view &regFile, unsigned i, VInt v) override {
+    if (regFile == RVISA::FPR) {
+      setSynchronousValue(fRegisterFile->_wr_mem, i, v);
+      return;
+    }
     setSynchronousValue(registerFile->_wr_mem, i, v);
   }
 

@@ -15,9 +15,9 @@ function(create_ripes_lib NAME)
         "LINK_LIBS"                    # multi-valued keywords
         ${ARGN})
 
-    file(GLOB LIB_SOURCES *.cpp)
-    file(GLOB LIB_HEADERS *.h)
-    file(GLOB LIB_UI *.ui)
+    file(GLOB LIB_SOURCES CONFIGURE_DEPENDS *.cpp)
+    file(GLOB LIB_HEADERS CONFIGURE_DEPENDS *.h)
+    file(GLOB LIB_UI CONFIGURE_DEPENDS *.ui)
     if(NOT OPTIONS_FIXED_NAME)
         check_nonempty_string(NAME)
         set(LIB_NAME ${NAME}_lib)

@@ -31,6 +31,13 @@ struct StageInfo {
   bool operator!=(const StageInfo &other) const { return !(*this == other); }
 };
 
+struct FPUnicicleStageInfo {
+  bool valid = false;
+  AInt pc = 0;
+  unsigned unit = 0;
+  unsigned stage = 0;
+};
+
 /// Address is byte-aligned, and the accessed bytes are [address : address +
 /// bytes[
 struct MemoryAccess {
@@ -214,6 +221,10 @@ public:
 
   virtual std::vector<std::pair<StageIndex, StageInfo>>
   additionalStageInfos() const {
+    return {};
+  }
+
+  virtual std::vector<FPUnicicleStageInfo> fpUnicicleStageInfos() const {
     return {};
   }
 

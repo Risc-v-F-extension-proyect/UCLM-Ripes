@@ -57,10 +57,26 @@ public:
     m_enabledISA = ISAInfoRegistry::getISA<XLenToRVISA<XLEN>()>(extensions);
     decode->setISA(m_enabledISA);
     uncompress->setISA(m_enabledISA);
-    falu->setLatencies(
+    falu->setConfiguration(
         RipesSettings::value(RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY).toUInt(),
         RipesSettings::value(RIPES_SETTING_RV5S_FALU_MUL_LATENCY).toUInt(),
-        RipesSettings::value(RIPES_SETTING_RV5S_FALU_DIV_LATENCY).toUInt());
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_DIV_LATENCY).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_ADDSUB_COUNT).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_MUL_COUNT).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_DIV_COUNT).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_ADDSUB_PIPELINED).toBool(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_MUL_PIPELINED).toBool(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_DIV_PIPELINED).toBool());
+    pending_instruction_window->setConfiguration(
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_MUL_LATENCY).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_DIV_LATENCY).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_ADDSUB_COUNT).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_MUL_COUNT).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_DIV_COUNT).toUInt(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_ADDSUB_PIPELINED).toBool(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_MUL_PIPELINED).toBool(),
+        RipesSettings::value(RIPES_SETTING_RV5S_FALU_DIV_PIPELINED).toBool());
 
     // -----------------------------------------------------------------------
     // Program counter
@@ -321,6 +337,8 @@ public:
         pending_instruction_window->data_mem_wr_src_ctrl_in;
     idex_reg->falu_ctrl_out >> pending_instruction_window->falu_ctrl_in;
     idex_reg->valid_out >> pending_instruction_window->valid_in;
+    0 >> pending_instruction_window->do_branch_in;
+    0 >> pending_instruction_window->controlflow_flush_in;
 
     1 >> exmem_reg->enable;
     hzunit->hazardEXMEMClear >> exmem_reg->clear;
@@ -591,13 +609,45 @@ public:
 
         if (pc && isExecutableAddress(*pc)) {
           const QChar unitName =
-              entry.unit == 0 ? 'A' : entry.unit == 1 ? 'M' : 'D';
+              entry.unitType == 0 ? 'A' : entry.unitType == 1 ? 'M' : 'D';
           info = StageInfo{*pc, true, StageInfo::State::None,
                            QString("%1%2").arg(unitName).arg(entry.stage + 1)};
         }
       }
       result.push_back({StageIndex{slot + 1, 0}, info});
     }
+    return result;
+  }
+
+  std::vector<FPUnicicleStageInfo> fpUnicicleStageInfos() const override {
+    std::vector<FPUnicicleStageInfo> result;
+    const auto entries = falu->pipelineDiagramEntries();
+    result.reserve(entries.size() + 1);
+
+    const auto exOpcode = static_cast<RVInstr>(idex_reg->opcode_out.uValue());
+    if (idex_reg->valid_out.uValue() != 0 &&
+        exOpcode != RVInstr::NOP &&
+        !Control::isFALUInstr(exOpcode) &&
+        isExecutableAddress(idex_reg->pc_out.uValue())) {
+      result.push_back({true, idex_reg->pc_out.uValue(), 0, 0});
+    }
+
+    for (const auto &entry : entries) {
+      if (!entry.valid) {
+        continue;
+      }
+
+      std::optional<VSRTL_VT_U> pc;
+      if (idex_reg->valid_out.uValue() != 0 &&
+          idex_reg->instr_tag_out.uValue() == entry.instrTag) {
+        pc = idex_reg->pc_out.uValue();
+      } else {
+        pc = pending_instruction_window->pcForTag(entry.instrTag);
+      }
+
+      result.push_back({true, pc.value_or(0), entry.unit + 1, entry.stage});
+    }
+
     return result;
   }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "processors/RISC-V/rv_control.h"
 #include "processors/RISC-V/riscv.h"
 
 #include "VSRTL/core/vsrtl_component.h"
@@ -17,8 +18,10 @@ public:
     hazardFEEnable << [this] { return !hasHazard(); };
     hazardIDEXEnable << [this] { return !hasEcallHazard(); };
     hazardEXMEMClear << [this] { return hasEcallHazard(); };
-    hazardIDEXClear << // MODIFIED
-        [this] { return hasLoadUseHazard() || branchHasDataHazard(); };
+    hazardIDEXClear << [this] {
+      return hasLoadUseHazard() || hasFPLoadUseHazard() ||
+             branchHasDataHazard();
+    };
     stallEcallHandling << [this] { return hasEcallHazard(); };
   }
 
@@ -27,12 +30,18 @@ public:
 
   INPUTPORT(ex_reg_wr_idx, c_RVRegsBits);
   INPUTPORT(ex_do_mem_read_en, 1);
+  INPUTPORT(ex_do_reg_write_en, 1);
+  INPUTPORT(ex_do_fp_write_en, 1);
 
   INPUTPORT(mem_do_reg_write, 1);
 
   INPUTPORT(wb_do_reg_write, 1);
 
+  INPUTPORT(fp_mem_do_reg_write, 1);
+  INPUTPORT(fp_wb_do_reg_write, 1);
+
   INPUTPORT_ENUM(opcode, RVInstr);
+  INPUTPORT_ENUM(id_opcode, RVInstr);
 
   // Hazard Front End enable: Low when stalling the front end (shall be
   // connected to a register 'enable' input port). The
@@ -63,7 +72,10 @@ public:
   INPUTPORT(mem_do_mem_read_en, 1);
 
 private:
-  bool hasHazard() { return hasLoadUseHazard() || hasEcallHazard() || branchHasDataHazard(); }
+  bool hasHazard() {
+    return hasLoadUseHazard() || hasFPLoadUseHazard() || hasEcallHazard() ||
+           branchHasDataHazard();
+  }
 
   // MODIFIED for load/use hazard detection of branch operands
   bool hasLoadUseHazard() const {
@@ -73,13 +85,42 @@ private:
     const unsigned idx1 = id_reg1_idx.uValue();
     const unsigned idx2 = id_reg2_idx.uValue();
 
-    const bool ex_do_mem_read = ex_do_mem_read_en.uValue();
+    const bool ex_do_mem_read =
+        ex_do_mem_read_en.uValue() && ex_do_reg_write_en.uValue();
     const bool mem_do_mem_read = mem_do_mem_read_en.uValue();
 
     const bool is_branch = id_do_branch || id_do_jump;
 
     return ((ex_idx == idx1 || ex_idx == idx2) && ex_do_mem_read)
         || ((mem_idx == idx1 || mem_idx == idx2) && mem_do_mem_read && is_branch);
+  }
+
+  static bool usesFPReg1(RVInstr opc) { return Control::isFALUInstr(opc); }
+
+  static bool usesFPReg2(RVInstr opc) {
+    switch (opc) {
+    case RVInstr::FSQRT:
+    case RVInstr::FSQRTD:
+    case RVInstr::FCVTSD:
+    case RVInstr::FCVTDS:
+      return false;
+    case RVInstr::FSW:
+    case RVInstr::FSD:
+      return true;
+    default:
+      return Control::isFALUInstr(opc);
+    }
+  }
+
+  bool hasFPLoadUseHazard() const {
+    const auto opc = id_opcode.eValue<RVInstr>();
+    const unsigned exidx = ex_reg_wr_idx.uValue();
+    const bool mrd =
+        ex_do_mem_read_en.uValue() && ex_do_fp_write_en.uValue();
+
+    const bool reg1Hazard = usesFPReg1(opc) && exidx == id_reg1_idx.uValue();
+    const bool reg2Hazard = usesFPReg2(opc) && exidx == id_reg2_idx.uValue();
+    return mrd && (reg1Hazard || reg2Hazard);
   }
 
   // MODIFIED: detect regular data hazards for branch operands
@@ -101,7 +142,11 @@ private:
     // front-end of the pipeline shall be stalled until the remainder of the
     // pipeline has been cleared and there are no more outstanding writes.
     const bool isEcall = opcode.eValue<RVInstr>() == RVInstr::ECALL;
-    return isEcall && (mem_do_reg_write.uValue() || wb_do_reg_write.uValue());
+    const bool integerOutstandingWrites =
+        mem_do_reg_write.uValue() || wb_do_reg_write.uValue();
+    const bool fpOutstandingWrites =
+        fp_mem_do_reg_write.uValue() || fp_wb_do_reg_write.uValue();
+    return isEcall && (integerOutstandingWrites || fpOutstandingWrites);
   }
 };
 } // namespace core

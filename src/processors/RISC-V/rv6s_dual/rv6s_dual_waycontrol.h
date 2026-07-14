@@ -43,7 +43,18 @@ private:
 
             // Load instructions
             case RVInstr::LB: case RVInstr::LH: case RVInstr::LW: case RVInstr::LBU:
-            case RVInstr::LHU: case RVInstr::LWU: case RVInstr::LD: case RVInstr::SD:
+            case RVInstr::LHU: case RVInstr::LWU: case RVInstr::LD:
+            case RVInstr::FLW: case RVInstr::FLD:
+
+            // FP arithmetic instructions
+            case RVInstr::FADD: case RVInstr::FSUB: case RVInstr::FMUL:
+            case RVInstr::FDIV: case RVInstr::FSQRT: case RVInstr::FMIN:
+            case RVInstr::FMAX: case RVInstr::FSGNJ: case RVInstr::FSGNJN:
+            case RVInstr::FSGNJX: case RVInstr::FADDD: case RVInstr::FSUBD:
+            case RVInstr::FMULD: case RVInstr::FDIVD: case RVInstr::FSQRTD:
+            case RVInstr::FMIND: case RVInstr::FMAXD: case RVInstr::FSGNJD:
+            case RVInstr::FSGNJND: case RVInstr::FSGNJXD: case RVInstr::FCVTSD:
+            case RVInstr::FCVTDS:
 
             // Jump instructions
             case RVInstr::JALR:
@@ -85,6 +96,15 @@ private:
                           isWriteRegInstr(opcode_way2.eValue<RVInstr>());
 
     return hazard_1 || hazard_2;
+  }
+
+  bool wawHazard() const {
+    const unsigned wridx_1 = wr_reg_idx_way1.uValue();
+    const unsigned wridx_2 = wr_reg_idx_way2.uValue();
+
+    return wridx_1 != 0 && wridx_1 == wridx_2 &&
+           isWriteRegInstr(opcode_way1.eValue<RVInstr>()) &&
+           isWriteRegInstr(opcode_way2.eValue<RVInstr>());
   }
 
   WayClass instrType(RVInstr opcode) const {
@@ -139,8 +159,8 @@ private:
       m_execWayValid = way1Type != WayClass::Data;
       m_execWaySrc = WaySrc::WAY1;
       m_stall = true && ifid_valid.uValue();
-    } else if (rawHazard()) {
-      // WAR hazard; only issue 1st fetched instruction
+    } else if (rawHazard() || wawHazard()) {
+      // Data dependency; only issue 1st fetched instruction
       m_dataWayValid = way1Type == WayClass::Data;
       m_execWayValid = way1Type != WayClass::Data;
       m_dataWaySrc = WaySrc::WAY1;

@@ -3,7 +3,7 @@
 
 #include <QCheckBox>
 #include <QDialogButtonBox>
-#include <QHBoxLayout>
+#include <QGridLayout>
 #include <QLabel>
 #include <QSignalBlocker>
 #include <QTimer>
@@ -144,6 +144,18 @@ ProcessorSelectionDialog::ProcessorSelectionDialog(QWidget *parent)
                             getFALUMulLatency());
     RipesSettings::setValue(RIPES_SETTING_RV5S_FALU_DIV_LATENCY,
                             getFALUDivLatency());
+    RipesSettings::setValue(RIPES_SETTING_RV5S_FALU_ADDSUB_COUNT,
+                            getFALUAddSubCount());
+    RipesSettings::setValue(RIPES_SETTING_RV5S_FALU_MUL_COUNT,
+                            getFALUMulCount());
+    RipesSettings::setValue(RIPES_SETTING_RV5S_FALU_DIV_COUNT,
+                            getFALUDivCount());
+    RipesSettings::setValue(RIPES_SETTING_RV5S_FALU_ADDSUB_PIPELINED,
+                            getFALUAddSubPipelined());
+    RipesSettings::setValue(RIPES_SETTING_RV5S_FALU_MUL_PIPELINED,
+                            getFALUMulPipelined());
+    RipesSettings::setValue(RIPES_SETTING_RV5S_FALU_DIV_PIPELINED,
+                            getFALUDivPipelined());
     accept();
   });
   connect(m_ui->buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -181,6 +193,30 @@ unsigned ProcessorSelectionDialog::getFALUMulLatency() const {
 
 unsigned ProcessorSelectionDialog::getFALUDivLatency() const {
   return m_faluDivLatency->value();
+}
+
+unsigned ProcessorSelectionDialog::getFALUAddSubCount() const {
+  return m_faluAddSubCount->value();
+}
+
+unsigned ProcessorSelectionDialog::getFALUMulCount() const {
+  return m_faluMulCount->value();
+}
+
+unsigned ProcessorSelectionDialog::getFALUDivCount() const {
+  return m_faluDivCount->value();
+}
+
+bool ProcessorSelectionDialog::getFALUAddSubPipelined() const {
+  return m_faluAddSubPipelined->isChecked();
+}
+
+bool ProcessorSelectionDialog::getFALUMulPipelined() const {
+  return m_faluMulPipelined->isChecked();
+}
+
+bool ProcessorSelectionDialog::getFALUDivPipelined() const {
+  return m_faluDivPipelined->isChecked();
 }
 
 void ProcessorSelectionDialog::updateSelectedTags() {
@@ -300,29 +336,82 @@ void ProcessorSelectionDialog::updateDialog(ISA isa, ProcessorTags tags) {
 }
 
 void ProcessorSelectionDialog::setupFALULatencyOptions() {
-  auto *label = new QLabel("FALU cycles:");
-  label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-
+  auto *label = new QLabel("FP ALUs:");
+  label->setAlignment(Qt::AlignRight | Qt::AlignTop);
+  label->setContentsMargins(27, 12, 0, 0);
   m_faluLatencyWidget = new QWidget(this);
-  auto *box = new QHBoxLayout(m_faluLatencyWidget);
-  box->setContentsMargins(0, 0, 0, 0);
-  box->setSpacing(10);
+  auto *grid = new QGridLayout(m_faluLatencyWidget);
+  grid->setContentsMargins(0, 0, 0, 0);
+  grid->setHorizontalSpacing(10);
+  grid->setVerticalSpacing(4);
 
-  auto addSpinBox = [box](QSpinBox *&spinBox, const QString &text,
-                          const QString &setting) {
-    box->addWidget(new QLabel(text));
-    spinBox = new QSpinBox;
-    spinBox->setRange(1, 255);
-    spinBox->setValue(RipesSettings::value(setting).toUInt());
-    spinBox->setFixedWidth(80);
-    box->addWidget(spinBox);
+  auto addHeaderLabel = [grid](const QString &text, int column) {
+    auto *headerLabel = new QLabel(text);
+    headerLabel->setContentsMargins(0, 12, 0, 0);
+    grid->addWidget(headerLabel, 0, column);
   };
 
-  addSpinBox(m_faluAddSubLatency, "add/sub",
-             RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY);
-  addSpinBox(m_faluMulLatency, "mul", RIPES_SETTING_RV5S_FALU_MUL_LATENCY);
-  addSpinBox(m_faluDivLatency, "div", RIPES_SETTING_RV5S_FALU_DIV_LATENCY);
-  box->addStretch(1);
+  addHeaderLabel("Type", 0);
+  addHeaderLabel("Latency", 1);
+  addHeaderLabel("Count", 2);
+  addHeaderLabel("Seg.", 3);
+
+  auto addUnitRow = [grid](int row, const QString &text,
+                           unsigned minLatency, unsigned maxLatency,
+                           bool alwaysNonSegmented,
+                           QSpinBox *&latencySpinBox,
+                           const QString &latencySetting,
+                           QSpinBox *&countSpinBox,
+                           const QString &countSetting,
+                           QCheckBox *&pipelinedCheckBox,
+                           const QString &pipelinedSetting) {
+    grid->addWidget(new QLabel(text), row, 0);
+
+    latencySpinBox = new QSpinBox;
+    latencySpinBox->setRange(minLatency, maxLatency);
+    latencySpinBox->setValue(RipesSettings::value(latencySetting).toUInt());
+    latencySpinBox->setFixedWidth(75);
+    grid->addWidget(latencySpinBox, row, 1);
+
+    countSpinBox = new QSpinBox;
+    countSpinBox->setRange(1, 3);
+    countSpinBox->setValue(RipesSettings::value(countSetting).toUInt());
+    countSpinBox->setFixedWidth(70);
+    grid->addWidget(countSpinBox, row, 2);
+
+    pipelinedCheckBox = new QCheckBox;
+    pipelinedCheckBox->setChecked(
+        !alwaysNonSegmented &&
+        RipesSettings::value(pipelinedSetting).toBool());
+    pipelinedCheckBox->setEnabled(!alwaysNonSegmented);
+    grid->addWidget(pipelinedCheckBox, row, 3);
+
+    auto updateCountAvailability = [countSpinBox, pipelinedCheckBox]() {
+      if (pipelinedCheckBox->isChecked()) {
+        countSpinBox->setValue(1);
+      }
+      countSpinBox->setEnabled(!pipelinedCheckBox->isChecked());
+    };
+
+    QObject::connect(
+        pipelinedCheckBox, &QCheckBox::toggled, countSpinBox,
+        [updateCountAvailability](bool) { updateCountAvailability(); });
+    updateCountAvailability();
+  };
+
+  addUnitRow(1, "add/sub", 2, 5, false, m_faluAddSubLatency,
+             RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY, m_faluAddSubCount,
+             RIPES_SETTING_RV5S_FALU_ADDSUB_COUNT, m_faluAddSubPipelined,
+             RIPES_SETTING_RV5S_FALU_ADDSUB_PIPELINED);
+  addUnitRow(2, "mul", 3, 10, false, m_faluMulLatency,
+             RIPES_SETTING_RV5S_FALU_MUL_LATENCY, m_faluMulCount,
+             RIPES_SETTING_RV5S_FALU_MUL_COUNT, m_faluMulPipelined,
+             RIPES_SETTING_RV5S_FALU_MUL_PIPELINED);
+  addUnitRow(3, "div", 4, 25, true, m_faluDivLatency,
+             RIPES_SETTING_RV5S_FALU_DIV_LATENCY, m_faluDivCount,
+             RIPES_SETTING_RV5S_FALU_DIV_COUNT, m_faluDivPipelined,
+             RIPES_SETTING_RV5S_FALU_DIV_PIPELINED);
+  grid->setColumnStretch(4, 1);
 
   m_ui->configForm->addRow(label, m_faluLatencyWidget);
 }

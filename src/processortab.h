@@ -24,6 +24,7 @@ class ProcessorTab;
 class InstructionModel;
 class RegisterModel;
 class PipelineDiagramModel;
+class FPUnicicleDiagramWidget;
 struct Layout;
 
 class ProcessorTab : public RipesTab {
@@ -56,8 +57,10 @@ private slots:
   void run(bool state);
   void autoClock(bool state);
   void autoClockTimeout();
+  void goToCycle();
   void setInstructionViewCenterRow(int row);
   void showPipelineDiagram();
+  void showFPUnicicleDiagram();
   
   // Añado esto para ver si puedo conseguir recargar pestañas desde aquí cuando se cambie la config
  signals: 
@@ -74,6 +77,7 @@ private:
   Ui::ProcessorTab *m_ui = nullptr;
   InstructionModel *m_instrModel = nullptr;
   PipelineDiagramModel *m_stageModel = nullptr;
+  FPUnicicleDiagramWidget *m_fpUnicicleDiagramWidget = nullptr;
 
   vsrtl::VSRTLWidget *m_vsrtlWidget = nullptr;
 
@@ -90,11 +94,14 @@ private:
   QAction *m_runAction = nullptr;
   QAction *m_displayValuesAction = nullptr;
   QAction *m_pipelineDiagramAction = nullptr;
+  QAction *m_fpUnicicleDiagramAction = nullptr;
   QAction *m_reverseAction = nullptr;
   QAction *m_resetAction = nullptr;
   QAction *m_darkmodeAction = nullptr;
   QTimer *m_autoClockTimer = nullptr;
 
   QSpinBox *m_autoClockInterval = nullptr;
+  QSpinBox *m_targetCycle = nullptr;
+  QAction *m_goToCycleAction = nullptr;
 };
 } // namespace Ripes

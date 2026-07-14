@@ -25,6 +25,7 @@
         <file>reverse.svg</file>
         <file>reset.svg</file>
         <file>run.svg</file>
+        <file>go-to-cycle.svg</file>
         <file>cancel.svg</file>
         <file>saveas.svg</file>
         <file>notepad.svg</file>
@@ -38,6 +39,7 @@
         <file>clear.svg</file>
         <file>led.svg</file>
         <file>tile.svg</file>
+        <file>unicycle-diagram.svg</file>
         <file>crosshair_blue.svg</file>
         <file>crosshair_gold.svg</file>
     </qresource>

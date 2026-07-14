@@ -39,6 +39,24 @@ class ForwardingUnit_DUAL : public Component {
     return ForwardingSrcDual::IdStage;
   }
 
+  ForwardingSrcDual calculateFPForwarding(const VSRTL_VT_U &readidx) {
+    if (readidx == mem_reg_wr_idx_exec.uValue() &&
+        mem_fp_reg_wr_en_exec.uValue()) {
+      return ForwardingSrcDual::MemStageExec;
+    } else if (readidx == mem_reg_wr_idx_data.uValue() &&
+               mem_fp_reg_wr_en_data.uValue() &&
+               mem_reg_mem_op.eValue<MemOp>() == MemOp::NOP) {
+      return ForwardingSrcDual::MemStageMem;
+    } else if (readidx == wb_reg_wr_idx_exec.uValue() &&
+               wb_fp_reg_wr_en_exec.uValue()) {
+      return ForwardingSrcDual::WbStageExec;
+    } else if (readidx == wb_reg_wr_idx_data.uValue() &&
+               wb_fp_reg_wr_en_data.uValue()) {
+      return ForwardingSrcDual::WbStageMem;
+    }
+    return ForwardingSrcDual::IdStage;
+  }
+
 public:
   ForwardingUnit_DUAL(const std::string &name, SimComponent *parent)
       : Component(name, parent) {
@@ -50,6 +68,19 @@ public:
         [this] { return calculateForwarding(id_reg1_idx_data.uValue()); };
     alu_reg2_fw_ctrl_data <<
         [this] { return calculateForwarding(id_reg2_idx_data.uValue()); };
+
+    falu_reg1_fw_ctrl_exec << [this] {
+      return calculateFPForwarding(id_reg1_idx_exec.uValue());
+    };
+    falu_reg2_fw_ctrl_exec << [this] {
+      return calculateFPForwarding(id_reg2_idx_exec.uValue());
+    };
+    falu_reg1_fw_ctrl_data << [this] {
+      return calculateFPForwarding(id_reg1_idx_data.uValue());
+    };
+    falu_reg2_fw_ctrl_data << [this] {
+      return calculateFPForwarding(id_reg2_idx_data.uValue());
+    };
   }
 
   INPUTPORT(id_reg1_idx_data, c_RVRegsBits);
@@ -59,22 +90,32 @@ public:
 
   INPUTPORT(mem_reg_wr_idx_exec, c_RVRegsBits);
   INPUTPORT(mem_reg_wr_en_exec, 1);
+  INPUTPORT(mem_fp_reg_wr_en_exec, 1);
 
   INPUTPORT(mem_reg_wr_idx_data, c_RVRegsBits);
   INPUTPORT(mem_reg_wr_en_data, 1);
+  INPUTPORT(mem_fp_reg_wr_en_data, 1);
   INPUTPORT_ENUM(mem_reg_mem_op, MemOp);
 
   INPUTPORT(wb_reg_wr_idx_exec, c_RVRegsBits);
   INPUTPORT(wb_reg_wr_en_exec, 1);
+  INPUTPORT(wb_fp_reg_wr_en_exec, 1);
 
   INPUTPORT(wb_reg_wr_idx_data, c_RVRegsBits);
   INPUTPORT(wb_reg_wr_en_data, 1);
+  INPUTPORT(wb_fp_reg_wr_en_data, 1);
 
   OUTPUTPORT_ENUM(alu_reg1_fw_ctrl_exec, ForwardingSrcDual);
   OUTPUTPORT_ENUM(alu_reg2_fw_ctrl_exec, ForwardingSrcDual);
 
   OUTPUTPORT_ENUM(alu_reg1_fw_ctrl_data, ForwardingSrcDual);
   OUTPUTPORT_ENUM(alu_reg2_fw_ctrl_data, ForwardingSrcDual);
+
+  OUTPUTPORT_ENUM(falu_reg1_fw_ctrl_exec, ForwardingSrcDual);
+  OUTPUTPORT_ENUM(falu_reg2_fw_ctrl_exec, ForwardingSrcDual);
+
+  OUTPUTPORT_ENUM(falu_reg1_fw_ctrl_data, ForwardingSrcDual);
+  OUTPUTPORT_ENUM(falu_reg2_fw_ctrl_data, ForwardingSrcDual);
 };
 } // namespace core
 } // namespace vsrtl
