@@ -3,8 +3,9 @@
 
 #include <QCheckBox>
 #include <QDialogButtonBox>
-#include <QHBoxLayout>
+#include <QGridLayout>
 #include <QLabel>
+#include <QSignalBlocker>
 #include <QTimer>
 
 #include "processorhandler.h"
@@ -108,11 +109,7 @@ ProcessorSelectionDialog::ProcessorSelectionDialog(QWidget *parent)
     }
     // Connect checkbox toggle events
     connect(chkbox, &QCheckBox::toggled, this, [this, ext](bool toggled) {
-      if (toggled) {
-        m_selectedExtensionsForID[m_selectedID] << ext;
-      } else {
-        m_selectedExtensionsForID[m_selectedID].removeAll(ext);
-      }
+      handleExtensionToggled(ext, toggled);
       updateFALULatencyOptionsEnabled();
     });
   }
@@ -147,6 +144,18 @@ ProcessorSelectionDialog::ProcessorSelectionDialog(QWidget *parent)
                             getFALUMulLatency());
     RipesSettings::setValue(RIPES_SETTING_RV5S_FALU_DIV_LATENCY,
                             getFALUDivLatency());
+    RipesSettings::setValue(RIPES_SETTING_RV5S_FALU_ADDSUB_COUNT,
+                            getFALUAddSubCount());
+    RipesSettings::setValue(RIPES_SETTING_RV5S_FALU_MUL_COUNT,
+                            getFALUMulCount());
+    RipesSettings::setValue(RIPES_SETTING_RV5S_FALU_DIV_COUNT,
+                            getFALUDivCount());
+    RipesSettings::setValue(RIPES_SETTING_RV5S_FALU_ADDSUB_PIPELINED,
+                            getFALUAddSubPipelined());
+    RipesSettings::setValue(RIPES_SETTING_RV5S_FALU_MUL_PIPELINED,
+                            getFALUMulPipelined());
+    RipesSettings::setValue(RIPES_SETTING_RV5S_FALU_DIV_PIPELINED,
+                            getFALUDivPipelined());
     accept();
   });
   connect(m_ui->buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -186,7 +195,35 @@ unsigned ProcessorSelectionDialog::getFALUDivLatency() const {
   return m_faluDivLatency->value();
 }
 
+unsigned ProcessorSelectionDialog::getFALUAddSubCount() const {
+  return m_faluAddSubCount->value();
+}
+
+unsigned ProcessorSelectionDialog::getFALUMulCount() const {
+  return m_faluMulCount->value();
+}
+
+unsigned ProcessorSelectionDialog::getFALUDivCount() const {
+  return m_faluDivCount->value();
+}
+
+bool ProcessorSelectionDialog::getFALUAddSubPipelined() const {
+  return m_faluAddSubPipelined->isChecked();
+}
+
+bool ProcessorSelectionDialog::getFALUMulPipelined() const {
+  return m_faluMulPipelined->isChecked();
+}
+
+bool ProcessorSelectionDialog::getFALUDivPipelined() const {
+  return m_faluDivPipelined->isChecked();
+}
+
 void ProcessorSelectionDialog::updateSelectedTags() {
+  if (m_ui->xlen->currentData().toInt() == 32) {
+    disableDExtensionForCurrentSelection();
+  }
+
   ISA selectedISA = // hacky hack
       (ISA)(m_ui->isa->currentData().toInt() + m_ui->xlen->currentIndex());
   DatapathType selectedDatapath =
@@ -266,11 +303,7 @@ void ProcessorSelectionDialog::updateDialog(ISA isa, ProcessorTags tags) {
       chkbox->setChecked(true);
     }
     connect(chkbox, &QCheckBox::toggled, this, [this, ext](bool toggled) {
-      if (toggled) {
-        m_selectedExtensionsForID[m_selectedID] << ext;
-      } else {
-        m_selectedExtensionsForID[m_selectedID].removeAll(ext);
-      }
+      handleExtensionToggled(ext, toggled);
       updateFALULatencyOptionsEnabled();
     });
   }
@@ -303,29 +336,53 @@ void ProcessorSelectionDialog::updateDialog(ISA isa, ProcessorTags tags) {
 }
 
 void ProcessorSelectionDialog::setupFALULatencyOptions() {
-  auto *label = new QLabel("FALU cycles:");
-  label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-
+  auto *label = new QLabel("FP ALUs:");
+  label->setAlignment(Qt::AlignRight | Qt::AlignTop);
+  label->setContentsMargins(27, 12, 0, 0);
   m_faluLatencyWidget = new QWidget(this);
-  auto *box = new QHBoxLayout(m_faluLatencyWidget);
-  box->setContentsMargins(0, 0, 0, 0);
-  box->setSpacing(10);
+  auto *grid = new QGridLayout(m_faluLatencyWidget);
+  grid->setContentsMargins(0, 0, 0, 0);
+  grid->setHorizontalSpacing(10);
+  grid->setVerticalSpacing(4);
 
-  auto addSpinBox = [box](QSpinBox *&spinBox, const QString &text,
-                          const QString &setting) {
-    box->addWidget(new QLabel(text));
-    spinBox = new QSpinBox;
-    spinBox->setRange(1, 255);
-    spinBox->setValue(RipesSettings::value(setting).toUInt());
-    spinBox->setFixedWidth(80);
-    box->addWidget(spinBox);
+  const QStringList headers = {"Type", "Latency", "Count", "Seg."};
+  for (int column = 0; column < headers.size(); ++column) {
+    auto *header = new QLabel(headers.at(column));
+    header->setContentsMargins(0, 12, 0, 0);
+    grid->addWidget(header, 0, column);
+  }
+
+  auto addUnitRow = [grid](int row, const QString &name,
+                           QSpinBox *&latency, const QString &latencySetting,
+                           QSpinBox *&count, const QString &countSetting,
+                           QCheckBox *&segmented,
+                           const QString &segmentedSetting) {
+    grid->addWidget(new QLabel(name), row, 0);
+    latency = new QSpinBox;
+    latency->setRange(1, 255);
+    latency->setValue(RipesSettings::value(latencySetting).toUInt());
+    grid->addWidget(latency, row, 1);
+    count = new QSpinBox;
+    count->setRange(1, 32);
+    count->setValue(RipesSettings::value(countSetting).toUInt());
+    grid->addWidget(count, row, 2);
+    segmented = new QCheckBox;
+    segmented->setChecked(RipesSettings::value(segmentedSetting).toBool());
+    grid->addWidget(segmented, row, 3);
   };
 
-  addSpinBox(m_faluAddSubLatency, "add/sub",
-             RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY);
-  addSpinBox(m_faluMulLatency, "mul", RIPES_SETTING_RV5S_FALU_MUL_LATENCY);
-  addSpinBox(m_faluDivLatency, "div", RIPES_SETTING_RV5S_FALU_DIV_LATENCY);
-  box->addStretch(1);
+  addUnitRow(1, "add/sub", m_faluAddSubLatency,
+             RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY, m_faluAddSubCount,
+             RIPES_SETTING_RV5S_FALU_ADDSUB_COUNT, m_faluAddSubPipelined,
+             RIPES_SETTING_RV5S_FALU_ADDSUB_PIPELINED);
+  addUnitRow(2, "mul", m_faluMulLatency,
+             RIPES_SETTING_RV5S_FALU_MUL_LATENCY, m_faluMulCount,
+             RIPES_SETTING_RV5S_FALU_MUL_COUNT, m_faluMulPipelined,
+             RIPES_SETTING_RV5S_FALU_MUL_PIPELINED);
+  addUnitRow(3, "div", m_faluDivLatency,
+             RIPES_SETTING_RV5S_FALU_DIV_LATENCY, m_faluDivCount,
+             RIPES_SETTING_RV5S_FALU_DIV_COUNT, m_faluDivPipelined,
+             RIPES_SETTING_RV5S_FALU_DIV_PIPELINED);
 
   m_ui->configForm->addRow(label, m_faluLatencyWidget);
 }
@@ -339,6 +396,88 @@ void ProcessorSelectionDialog::updateFALULatencyOptionsEnabled() {
   const bool hasFExtension =
       m_selectedExtensionsForID[m_selectedID].contains("F");
   m_faluLatencyWidget->setEnabled(isFiveStage && hasFExtension);
+}
+
+void ProcessorSelectionDialog::handleExtensionToggled(const QString &ext,
+                                                      bool toggled) {
+  QStringList &extensions = m_selectedExtensionsForID[m_selectedID];
+
+  if (toggled) {
+    if (!extensions.contains(ext)) {
+      extensions << ext;
+    }
+  } else {
+    extensions.removeAll(ext);
+    if (ext == "F") {
+      extensions.removeAll("D");
+      setExtensionCheckboxChecked("D", false);
+    }
+  }
+
+  if (ext == "D" && toggled) {
+    enableDExtensionDependencies();
+  }
+}
+
+void ProcessorSelectionDialog::enableDExtensionDependencies() {
+  QStringList &extensions = m_selectedExtensionsForID[m_selectedID];
+  if (!extensions.contains("D")) {
+    return;
+  }
+
+  if (!extensions.contains("F")) {
+    extensions << "F";
+  }
+  setExtensionCheckboxChecked("F", true);
+
+  if (m_ui->xlen->currentData().toInt() == 64) {
+    return;
+  }
+
+  const int rv64Index = m_ui->xlen->findData(64);
+  if (rv64Index < 0) {
+    return;
+  }
+
+  m_ui->xlen->setCurrentIndex(rv64Index);
+
+  const ISA rv64ISA = static_cast<ISA>(
+      m_ui->isa->currentData().toInt() + m_ui->xlen->currentIndex());
+  const QList<ProcessorID> rv64Processors =
+      ProcessorRegistry::getProcessor(rv64ISA, m_selectedTags);
+  for (const ProcessorID id : rv64Processors) {
+    QStringList &rv64Extensions = m_selectedExtensionsForID[id];
+    if (!rv64Extensions.contains("D")) {
+      rv64Extensions << "D";
+    }
+    if (!rv64Extensions.contains("F")) {
+      rv64Extensions << "F";
+    }
+  }
+}
+
+void ProcessorSelectionDialog::disableDExtensionForCurrentSelection() {
+  for (const auto &desc : ProcessorRegistry::getAvailableProcessors()) {
+    if (desc.second->isaInfo().isa->bits() == 32) {
+      m_selectedExtensionsForID[desc.first].removeAll("D");
+    }
+  }
+  setExtensionCheckboxChecked("D", false);
+}
+
+void ProcessorSelectionDialog::setExtensionCheckboxChecked(const QString &ext,
+                                                           bool checked) {
+  for (int i = 0; i < m_ui->extensions->layout()->count(); ++i) {
+    QLayoutItem *item = m_ui->extensions->layout()->itemAt(i);
+    auto *checkbox = qobject_cast<QCheckBox *>(item->widget());
+    if (checkbox && checkbox->text() == ext) {
+      if (checkbox->isChecked() != checked) {
+        const QSignalBlocker blocker(checkbox);
+        checkbox->setChecked(checked);
+      }
+      return;
+    }
+  }
 }
 
 void ProcessorSelectionDialog::populateVariants() {

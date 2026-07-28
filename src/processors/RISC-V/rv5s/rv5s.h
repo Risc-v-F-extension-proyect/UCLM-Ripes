@@ -58,6 +58,29 @@ public:
         RipesSettings::value(RIPES_SETTING_RV5S_FALU_MUL_LATENCY).toUInt(),
         RipesSettings::value(RIPES_SETTING_RV5S_FALU_DIV_LATENCY).toUInt());
 
+    hzunit->setConfiguration(
+        RipesSettings::value(
+            RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY).toUInt(),
+        RipesSettings::value(
+            RIPES_SETTING_RV5S_FALU_MUL_LATENCY).toUInt(),
+        RipesSettings::value(
+            RIPES_SETTING_RV5S_FALU_DIV_LATENCY).toUInt(),
+
+        RipesSettings::value(
+            RIPES_SETTING_RV5S_FALU_ADDSUB_COUNT).toUInt(),
+        RipesSettings::value(
+            RIPES_SETTING_RV5S_FALU_MUL_COUNT).toUInt(),
+        RipesSettings::value(
+            RIPES_SETTING_RV5S_FALU_DIV_COUNT).toUInt(),
+
+        RipesSettings::value(
+            RIPES_SETTING_RV5S_FALU_ADDSUB_PIPELINED).toBool(),
+        RipesSettings::value(
+            RIPES_SETTING_RV5S_FALU_MUL_PIPELINED).toBool(),
+        RipesSettings::value(
+            RIPES_SETTING_RV5S_FALU_DIV_PIPELINED).toBool()
+    );
+
     // -----------------------------------------------------------------------
     // Program counter
     pc_reg->out >> pc_4->op1;
@@ -485,7 +508,7 @@ public:
       if (stageValid) {
         namedState = fpEXStageName();
       }
-      if (idex_reg->stalled_out.uValue() == 1) {
+      if (idex_reg->stalled_out.uValue() == 1 && namedState.isEmpty()) {
         state = StageInfo::State::Stalled;
       } else if (m_cycleCount > EX && idex_reg->valid_out.uValue() == 0) {
         state = StageInfo::State::Flushed;
@@ -511,6 +534,37 @@ public:
     }
 
     return StageInfo({getPcForStage(stage), stageValid, state, namedState});
+  }
+
+  std::vector<FPUnicicleStageInfo> fpUnicicleStageInfos() const override {
+    if (!idex_reg->valid_out.uValue()) {
+      return {};
+    }
+    const auto opcode = idex_reg->opcode_out.eValue<RVInstr>();
+    unsigned unit = Control::isFALUInstr(opcode) ? 1u : 0u;
+    switch (opcode) {
+    case RVInstr::FADD:
+    case RVInstr::FSUB:
+    case RVInstr::FADDD:
+    case RVInstr::FSUBD:
+      unit = 1;
+      break;
+    case RVInstr::FMUL:
+    case RVInstr::FMULD:
+      unit = 2;
+      break;
+    case RVInstr::FDIV:
+    case RVInstr::FDIVD:
+    case RVInstr::FSQRT:
+    case RVInstr::FSQRTD:
+      unit = 3;
+      break;
+    default:
+      break;
+    }
+    const unsigned cycle = falu_latency->current_cycle.uValue();
+    return {{true, idex_reg->pc_out.uValue(), unit,
+             cycle == 0 ? 0u : cycle - 1}};
   }
 
   void setProgramCounter(AInt address) override {
@@ -629,10 +683,14 @@ private:
     switch (idex_reg->opcode_out.eValue<RVInstr>()) {
     case RVInstr::FADD:
     case RVInstr::FSUB:
+    case RVInstr::FADDD:
+    case RVInstr::FSUBD:
       return "A" + QString::number(cycle);
     case RVInstr::FMUL:
+    case RVInstr::FMULD:
       return "M" + QString::number(cycle);
     case RVInstr::FDIV:
+    case RVInstr::FDIVD:
       return "D" + QString::number(cycle);
     default:
       return "";
