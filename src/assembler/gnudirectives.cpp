@@ -1,6 +1,9 @@
 #include "gnudirectives.h"
 #include "assembler.h"
 
+#include <cstdint>
+#include <cstring>
+
 namespace Ripes {
 namespace Assembler {
 
@@ -25,6 +28,7 @@ DirectiveVec gnuDirectives() {
   DirectiveVec directives;
 
   add_directive(directives, floatDirective());
+  add_directive(directives, doubleFloatDirective());
 
   add_directive(directives, stringDirective());
   add_directive(directives, ascizDirective());
@@ -136,6 +140,37 @@ Directive floatDirective() {
     return {bytes};
   };
   return Directive(".float", floatFunctor);
+}
+
+Directive doubleFloatDirective() {
+  auto doubleFunctor =
+      [](
+          const AssemblerBase *,
+          const DirectiveArg &arg
+          ) -> Result<QByteArray>
+  {
+    if(arg.line.tokens.length() < 1) {
+      return {Error(arg.line, "Invalid number of arguments, you must declare al least a double value")};
+    }
+    QByteArray bytes;
+    for(const auto &token: arg.line.tokens){
+      bool ok = false;
+      const double d = token.toDouble(&ok);
+      uint64_t u = 0;
+      if (ok) {
+        static_assert(sizeof(double) == sizeof(uint64_t), "The double argument and the casted representation of double value in binary must be the same size");
+        std::memcpy(&u, &d, sizeof(uint64_t));
+      } else {
+        return {Error(arg.line, QString("Invalid double value format as argument. You introduced %1").arg(token))};
+      }
+      for (int i = 0; i < 8; ++i) {
+        bytes.append(static_cast<char>(u & 0xffu));
+        u >>= 8;
+      }
+    }
+    return {bytes};
+  };
+  return Directive(".double", doubleFunctor);
 }
 
 Directive ascizDirective() { return Directive(".asciz", &stringFunctor); }

@@ -193,10 +193,15 @@ void enableExt(const ISAInfoBase *isa, InstrVec &instructions,
                PseudoInstrVec &pseudoInstructions);
 }
 
+namespace ExtD {
+void enableExt(const ISAInfoBase *isa, InstrVec &instructions,
+               PseudoInstrVec &pseudoInstructions);
+}
+
 class RV_ISAInfoBase : public ISAInfoBase {
 public:
   static const QStringList &getSupportedExtensions() {
-    static const QStringList ext = {"M", "C", "F"};
+    static const QStringList ext = {"M", "C", "F", "D"};
     return ext;
   }
   static const QStringList &getDefaultExtensions() {
@@ -205,8 +210,12 @@ public:
   }
 
   RV_ISAInfoBase(const QStringList extensions) {
+    QStringList normalizedExtensions = extensions;
+    if (normalizedExtensions.contains("D") && !normalizedExtensions.contains("F")) {
+      normalizedExtensions << "F";
+    }
     // Validate extensions
-    for (const auto &ext : extensions) {
+    for (const auto &ext : normalizedExtensions) {
       if (supportsExtension(ext)) {
         m_enabledExtensions << ext;
       } else {
@@ -272,6 +281,8 @@ public:
       return "Compressed instructions";
     if (ext == "F")
       return "Simple Floating-Point Instructions";
+    if (ext == "D")
+      return "Double-Precision Floating-Point Instructions";
     Q_UNREACHABLE();
   }
 
@@ -295,6 +306,9 @@ protected:
         break;
       case 'F':
         RVISA::ExtF::enableExt(this, m_instructions, m_pseudoInstructions);
+        break;
+      case 'D':
+        RVISA::ExtD::enableExt(this, m_instructions, m_pseudoInstructions);
         break;
       }
     }
