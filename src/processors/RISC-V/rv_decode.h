@@ -30,6 +30,11 @@ public:
                 const auto fields = RVInstrParser::getParser()->decodeI32Instr(instrValue);
                 switch (fields[2]) {
                     case 0b010: return RVInstr::FLW;
+                    case 0b011:
+                        if (m_isa && m_isa->extensionEnabled("D")) {
+                            return RVInstr::FLD;
+                        }
+                        break;
                     default: break;
                 }
                 break;
@@ -38,6 +43,11 @@ public:
                 const auto fields = RVInstrParser::getParser()->decodeS32Instr(instrValue);
                 switch (fields[3]) {
                     case 0b010: return RVInstr::FSW;
+                    case 0b011:
+                        if (m_isa && m_isa->extensionEnabled("D")) {
+                            return RVInstr::FSD;
+                        }
+                        break;
                     default: break;
                 }
                 break;
@@ -95,6 +105,11 @@ public:
                                     return RVInstr::FSQRT;
                                 }
                                 break;
+                            case 0b01000:
+                                if (m_isa->extensionEnabled("D") && fields[2] == 0b00001) {
+                                    return RVInstr::FCVTSD;
+                                }
+                                break;
                             case 0b00101:
                                 switch(fields[4]){
                                     case 0b00: return RVInstr::FMIN;
@@ -106,6 +121,39 @@ public:
                                     case 0b000: return RVInstr::FSGNJ;
                                     case 0b001: return RVInstr::FSGNJN;
                                     case 0b010: return RVInstr::FSGNJX;
+                                    default: return RVInstr::NOP;
+                                }
+
+                            default: break;
+                        }
+                    }
+                    if(fields[1] == 0b01 && m_isa->extensionEnabled("D")){
+                        switch(fields[0]){
+                            case 0b00000: return RVInstr::FADDD;
+                            case 0b00001: return RVInstr::FSUBD;
+                            case 0b00010: return RVInstr::FMULD;
+                            case 0b00011: return RVInstr::FDIVD;
+                            case 0b01011:
+                                if (fields[2] == 0b00000) {
+                                    return RVInstr::FSQRTD;
+                                }
+                                break;
+                            case 0b01000:
+                                if (fields[2] == 0b00000) {
+                                    return RVInstr::FCVTDS;
+                                }
+                                break;
+                            case 0b00101:
+                                switch(fields[4]){
+                                    case 0b00: return RVInstr::FMIND;
+                                    case 0b01: return RVInstr::FMAXD;
+                                    default: return RVInstr::NOP;
+                                }
+                            case 0b00100:
+                                switch(fields[4]){
+                                    case 0b000: return RVInstr::FSGNJD;
+                                    case 0b001: return RVInstr::FSGNJND;
+                                    case 0b010: return RVInstr::FSGNJXD;
                                     default: return RVInstr::NOP;
                                 }
 

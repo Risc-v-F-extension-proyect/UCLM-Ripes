@@ -22,6 +22,18 @@ public:
             case RVInstr::FSGNJ:
             case RVInstr::FSGNJN:
             case RVInstr::FSGNJX:
+            case RVInstr::FADDD:
+            case RVInstr::FSUBD:
+            case RVInstr::FMULD:
+            case RVInstr::FDIVD:
+            case RVInstr::FSQRTD:
+            case RVInstr::FMIND:
+            case RVInstr::FMAXD:
+            case RVInstr::FSGNJD:
+            case RVInstr::FSGNJND:
+            case RVInstr::FSGNJXD:
+            case RVInstr::FCVTSD:
+            case RVInstr::FCVTDS:
                 return true;
             default:
                 return false;
@@ -73,8 +85,10 @@ public:
             case RVInstr::LHU: return MemOp::LHU;
             case RVInstr::LWU: return MemOp::LWU;
             //F extesion cases
-            case RVInstr::FLW: return MemOp::LW;
-            case RVInstr::FSW: return MemOp::SW;
+            case RVInstr::FLW: return MemOp::FLW;
+            case RVInstr::FSW: return MemOp::FSW;
+            case RVInstr::FLD: return MemOp::FLD;
+            case RVInstr::FSD: return MemOp::FSD;
             default:
                 return MemOp::NOP;
         }
@@ -83,6 +97,7 @@ public:
     static VSRTL_VT_U do_fp_reg_do_write_ctrl(RVInstr opc) {
         switch(opc) {
             case RVInstr::FLW:
+            case RVInstr::FLD:
                 return 1;
             default:
                 return isFALUInstr(opc);
@@ -127,6 +142,7 @@ public:
             case RVInstr::LB: case RVInstr::LH: case RVInstr::LW: case RVInstr::LBU:
             case RVInstr::LHU: case RVInstr::LWU: case RVInstr::LD:
             case RVInstr::FLW:
+            case RVInstr::FLD:
                 return RegWrSrc::MEMREAD;
 
             // Jump instructions
@@ -142,6 +158,7 @@ public:
     static DataMemWrSrc do_data_mem_wr_src_ctrl(RVInstr opc) {
         switch(opc) { 
             case RVInstr::FSW:
+            case RVInstr::FSD:
                 return DataMemWrSrc::FREG2;
             default:
                 return DataMemWrSrc::REG2;
@@ -186,6 +203,7 @@ public:
         case RVInstr::LB: case RVInstr::LH: case RVInstr::LW: case RVInstr::LBU: case RVInstr::LHU:
         case RVInstr::SB: case RVInstr::SH: case RVInstr::SW: case RVInstr::LWU: case RVInstr::LD:
         case RVInstr::SD: case RVInstr::FLW: case RVInstr::FSW:
+        case RVInstr::FLD: case RVInstr::FSD:
             return AluSrc2::IMM;
 
         // Branch instructions
@@ -215,6 +233,18 @@ public:
             case RVInstr::FSGNJ : return FALUOp::SGNJ;
             case RVInstr::FSGNJN: return FALUOp::SGNJN;
             case RVInstr::FSGNJX: return FALUOp::SGNJX;
+            case RVInstr::FADDD : return FALUOp::ADD_D;
+            case RVInstr::FSUBD : return FALUOp::SUB_D;
+            case RVInstr::FMULD : return FALUOp::MUL_D;
+            case RVInstr::FDIVD : return FALUOp::DIV_D;
+            case RVInstr::FSQRTD: return FALUOp::SQRT_D;
+            case RVInstr::FMIND : return FALUOp::MIN_D;
+            case RVInstr::FMAXD : return FALUOp::MAX_D;
+            case RVInstr::FSGNJD : return FALUOp::SGNJ_D;
+            case RVInstr::FSGNJND: return FALUOp::SGNJN_D;
+            case RVInstr::FSGNJXD: return FALUOp::SGNJX_D;
+            case RVInstr::FCVTSD: return FALUOp::CVT_S_D;
+            case RVInstr::FCVTDS: return FALUOp::CVT_D_S;
 
             default: return FALUOp::NOP;
 
@@ -274,8 +304,9 @@ public:
             case RVInstr::REMUW : return ALUOp::REMUW;
 
             // F extension cases for flw and fsw
-            case RVInstr::FLW: return ALUOp::ADD;
-            case RVInstr::FSW: return ALUOp::ADD;
+            case RVInstr::FLW: case RVInstr::FSW:
+            case RVInstr::FLD: case RVInstr::FSD:
+                return ALUOp::ADD;
 
             default: return ALUOp::NOP;
         }
@@ -285,6 +316,7 @@ public:
         switch(opc) {
             case RVInstr::SB: case RVInstr::SH: case RVInstr::SW: case RVInstr::SD:
             case RVInstr::FSW:
+            case RVInstr::FSD:
                 return 1;
             default: return 0;
         }
@@ -296,6 +328,7 @@ public:
             case RVInstr::LHU: case RVInstr::LWU: case RVInstr::LD:
                 return 1;
             case RVInstr::FLW:
+            case RVInstr::FLD:
                 return 1;
             default: return 0;
         }

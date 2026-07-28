@@ -49,6 +49,7 @@ public:
       case RVInstr::LWU:
       case RVInstr::LD:
       case RVInstr::FLW:
+      case RVInstr::FLD:
       case RVInstr::ADDI:
       case RVInstr::SLTI:
       case RVInstr::SLTIU:
@@ -74,7 +75,8 @@ public:
       case RVInstr::SH:
       case RVInstr::SW:
       case RVInstr::SD:
-      case RVInstr::FSW: {
+      case RVInstr::FSW:
+      case RVInstr::FSD: {
         return VT_U(signextend<12>(((instr.uValue() & 0xfe000000)) >> 20) |
                     ((instr.uValue() & 0xf80) >> 7));
       }

@@ -58,10 +58,14 @@ private:
     switch (opc) {
     case RVInstr::FADD:
     case RVInstr::FSUB:
+    case RVInstr::FADDD:
+    case RVInstr::FSUBD:
       return m_addSubLatency;
     case RVInstr::FMUL:
+    case RVInstr::FMULD:
       return m_mulLatency;
     case RVInstr::FDIV:
+    case RVInstr::FDIVD:
       return m_divLatency;
     default:
       return 1;
