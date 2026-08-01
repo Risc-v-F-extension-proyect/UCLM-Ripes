@@ -2,14 +2,26 @@
 #include "ui_processortab.h"
 
 #include <QDir>
+#include <QDialog>
 #include <QFontMetrics>
+#include <QHeaderView>
+#include <QHBoxLayout>
+#include <QLabel>
 #include <QMessageBox>
+#include <QPainter>
+#include <QPainterPath>
 #include <QPushButton>
 #include <QScrollBar>
 #include <QSpinBox>
 #include <QTemporaryFile>
+#include <QTableWidget>
+#include <QVBoxLayout>
+
+#include <limits>
+#include <vector>
 
 #include "consolewidget.h"
+#include "fpuniciclediagramwidget.h"
 #include "instructionmodel.h"
 #include "pipelinediagrammodel.h"
 #include "pipelinediagramwidget.h"
@@ -24,10 +36,220 @@
 #include "syscall/systemio.h"
 
 #include "VSRTL/graphics/vsrtl_widget.h"
+#include "VSRTL/core/vsrtl_design.h"
 
 #include "processors/interface/ripesprocessor.h"
 
 namespace Ripes {
+
+class StallHistoryChart : public QWidget {
+public:
+  explicit StallHistoryChart(QWidget *parent = nullptr) : QWidget(parent) {
+    setMinimumHeight(230);
+  }
+
+  void setHistories(std::vector<uint64_t> data,
+                    std::vector<uint64_t> structural,
+                    std::vector<uint64_t> control) {
+    m_data = std::move(data);
+    m_structural = std::move(structural);
+    m_control = std::move(control);
+    update();
+  }
+
+  void setSelectedCycle(uint64_t cycle) {
+    m_selectedCycle = cycle;
+    setMinimumHeight(cycle == 0 ? 230 : 330);
+    updateGeometry();
+    update();
+  }
+
+  void setCycleRange(uint64_t first, uint64_t last) {
+    m_rangeFirst = first;
+    m_rangeLast = last;
+    update();
+  }
+
+protected:
+  void paintEvent(QPaintEvent *) override {
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.fillRect(rect(), palette().base());
+
+    const qreal bottomMargin = m_selectedCycle == 0 ? 45 : 135;
+    const QRectF plot =
+        QRectF(rect()).adjusted(75, 24, -20, -bottomMargin);
+    painter.setPen(palette().text().color());
+    painter.drawLine(plot.bottomLeft(), plot.topLeft());
+    painter.drawLine(plot.bottomLeft(), plot.bottomRight());
+    painter.save();
+    painter.translate(16, plot.center().y());
+    painter.rotate(-90);
+    painter.drawText(QRectF(-plot.height() / 2, -10, plot.height(), 20),
+                     Qt::AlignCenter, "Accumulated stalls");
+    painter.restore();
+    painter.drawText(QRectF(plot.left(), plot.bottom() + 8, plot.width(), 25),
+                     Qt::AlignCenter, "Cycle");
+
+    const std::size_t fullSampleCount =
+        std::max({m_data.size(), m_structural.size(), m_control.size()});
+    const uint64_t firstCycle =
+        m_rangeFirst == 0 ? 1 : std::min<uint64_t>(m_rangeFirst, fullSampleCount);
+    const uint64_t lastCycle =
+        m_rangeLast == 0 ? fullSampleCount
+                         : std::min<uint64_t>(m_rangeLast, fullSampleCount);
+    const auto visibleData = rangeValues(m_data, firstCycle, lastCycle);
+    const auto visibleStructural =
+        rangeValues(m_structural, firstCycle, lastCycle);
+    const auto visibleControl = rangeValues(m_control, firstCycle, lastCycle);
+    const std::size_t sampleCount = visibleData.size();
+    const uint64_t maximum = std::max<uint64_t>(
+        1, std::max({lastValue(visibleData), lastValue(visibleStructural),
+                     lastValue(visibleControl)}));
+    painter.drawText(QRectF(0, plot.top() - 8, 48, 20), Qt::AlignRight,
+                     QString::number(maximum));
+    painter.drawText(QRectF(0, plot.bottom() - 10, 48, 20), Qt::AlignRight,
+                     QString::number(m_rangeFirst == 0 ? 0 : firstCycle));
+    painter.drawText(QRectF(plot.left() - 10, plot.bottom() + 4, 40, 20),
+                     Qt::AlignLeft, "0");
+    painter.drawText(QRectF(plot.right() - 60, plot.bottom() + 4, 60, 20),
+                     Qt::AlignRight,
+                     QString::number(lastCycle));
+
+    drawSeries(painter, plot, visibleControl, maximum, QColor(210, 45, 45));
+    drawSeries(painter, plot, visibleStructural, maximum, QColor(45, 105, 210));
+    drawSeries(painter, plot, visibleData, maximum, QColor(225, 180, 20));
+
+    const QColor textColor = palette().text().color();
+    if (m_selectedCycle >= firstCycle && m_selectedCycle <= lastCycle &&
+        sampleCount > 0) {
+      const qreal selectedX =
+          plot.left() +
+          plot.width() *
+              static_cast<qreal>(m_selectedCycle - firstCycle + 1) /
+              static_cast<qreal>(sampleCount);
+      painter.setPen(QPen(textColor, 1.5, Qt::DashLine));
+      painter.drawLine(QPointF(selectedX, plot.top()),
+                       QPointF(selectedX, plot.bottom()));
+      painter.drawText(QRectF(selectedX - 45, plot.top(), 90, 20),
+                       Qt::AlignCenter,
+                       QString("Cycle %1").arg(m_selectedCycle));
+
+      const QRectF heatmap(plot.left(), plot.bottom() + 48, plot.width(), 66);
+      painter.setPen(textColor);
+      painter.drawText(QRectF(heatmap.left(), heatmap.top() - 23,
+                              heatmap.width(), 20),
+                       Qt::AlignLeft | Qt::AlignVCenter,
+                       QString("Stalls at cycle %1").arg(m_selectedCycle));
+      drawSelectedCycleRow(
+          painter, heatmap, 0, m_data, QColor(225, 180, 20), textColor,
+          palette().mid().color(), palette().alternateBase().color(), "Data");
+      drawSelectedCycleRow(
+          painter, heatmap, 1, m_structural, QColor(45, 105, 210), textColor,
+          palette().mid().color(), palette().alternateBase().color(),
+          "Structural");
+      drawSelectedCycleRow(
+          painter, heatmap, 2, m_control, QColor(210, 45, 45), textColor,
+          palette().mid().color(), palette().alternateBase().color(),
+          "Control");
+    }
+
+    drawLegend(painter, plot.left(), 5, QColor(225, 180, 20), textColor,
+               "Data");
+    drawLegend(painter, plot.left() + 90, 5, QColor(45, 105, 210),
+               textColor, "Structural");
+    drawLegend(painter, plot.left() + 205, 5, QColor(210, 45, 45),
+               textColor, "Control");
+  }
+
+private:
+  static uint64_t lastValue(const std::vector<uint64_t> &values) {
+    return values.empty() ? 0 : values.back();
+  }
+
+  static void drawSeries(QPainter &painter, const QRectF &plot,
+                         const std::vector<uint64_t> &values,
+                         uint64_t maximum, const QColor &color) {
+    if (values.empty())
+      return;
+    QPainterPath path;
+    qreal previousY = plot.bottom();
+    path.moveTo(plot.left(), previousY);
+    for (std::size_t i = 0; i < values.size(); ++i) {
+      const qreal x = plot.left() +
+                      plot.width() * static_cast<qreal>(i + 1) /
+                          static_cast<qreal>(values.size());
+      const qreal y = plot.bottom() -
+                      plot.height() * static_cast<qreal>(values[i]) /
+                          static_cast<qreal>(maximum);
+      path.lineTo(x, previousY);
+      path.lineTo(x, y);
+      previousY = y;
+    }
+    painter.setPen(QPen(color, 2.5));
+    painter.drawPath(path);
+  }
+
+  static void drawLegend(QPainter &painter, qreal x, qreal y,
+                         const QColor &color, const QColor &textColor,
+                         const QString &text) {
+    painter.fillRect(QRectF(x, y + 4, 14, 4), color);
+    painter.setPen(textColor);
+    painter.drawText(QRectF(x + 20, y - 3, 90, 20), text);
+  }
+
+  static std::vector<uint64_t>
+  rangeValues(const std::vector<uint64_t> &values, uint64_t first,
+              uint64_t last) {
+    std::vector<uint64_t> result;
+    if (values.empty() || first == 0 || first > last || first > values.size())
+      return result;
+    last = std::min<uint64_t>(last, values.size());
+    const uint64_t baseline = first <= 1 ? 0 : values[first - 2];
+    result.reserve(static_cast<std::size_t>(last - first + 1));
+    for (uint64_t cycle = first; cycle <= last; ++cycle)
+      result.push_back(values[cycle - 1] - baseline);
+    return result;
+  }
+
+  void drawSelectedCycleRow(
+      QPainter &painter, const QRectF &heatmap, unsigned row,
+      const std::vector<uint64_t> &history, const QColor &color,
+      const QColor &textColor, const QColor &borderColor,
+      const QColor &backgroundColor, const QString &label) {
+    constexpr qreal rowHeight = 18;
+    constexpr qreal rowGap = 4;
+    const qreal y = heatmap.top() + row * (rowHeight + rowGap);
+    const QRectF band(heatmap.left(), y, heatmap.width(), rowHeight);
+    painter.setPen(QPen(borderColor, 1));
+    painter.setBrush(backgroundColor);
+    painter.drawRect(band);
+    painter.setPen(textColor);
+    painter.drawText(QRectF(0, y, heatmap.left() - 8, rowHeight),
+                     Qt::AlignRight | Qt::AlignVCenter, label);
+
+    const std::size_t index = static_cast<std::size_t>(m_selectedCycle - 1);
+    bool stalled = false;
+    if (index < history.size()) {
+      const uint64_t previous = index == 0 ? 0 : history[index - 1];
+      if (history[index] > previous) {
+        stalled = true;
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(color);
+        painter.drawRect(band);
+      }
+    }
+    painter.setPen(textColor);
+    painter.drawText(band, Qt::AlignCenter, stalled ? "Stall" : "None");
+  }
+
+  std::vector<uint64_t> m_data;
+  std::vector<uint64_t> m_structural;
+  std::vector<uint64_t> m_control;
+  uint64_t m_selectedCycle = 0;
+  uint64_t m_rangeFirst = 0;
+  uint64_t m_rangeLast = 0;
+};
 
 static QString convertToSIUnits(const double l_value, int precision = 2) {
   QString unit;
@@ -96,6 +318,96 @@ ProcessorTab::ProcessorTab(QToolBar *controlToolbar,
   }
 
   m_stageModel = new PipelineDiagramModel(this);
+  m_fpUnicicleDiagramWidget = new FPUnicicleDiagramWidget(this);
+  m_advancedStatisticsDialog = new QDialog(this);
+  m_advancedStatisticsDialog->setWindowFlag(Qt::Window, true);
+  m_advancedStatisticsDialog->setWindowTitle(
+      "Advanced execution statistics");
+  m_advancedStatisticsDialog->resize(800, 760);
+  auto *statisticsLayout = new QVBoxLayout(m_advancedStatisticsDialog);
+  statisticsLayout->setContentsMargins(24, 20, 24, 20);
+  auto *statisticsTitle = new QLabel("Advanced execution statistics");
+  QFont statisticsTitleFont = statisticsTitle->font();
+  statisticsTitleFont.setPointSize(statisticsTitleFont.pointSize() + 4);
+  statisticsTitleFont.setBold(true);
+  statisticsTitle->setFont(statisticsTitleFont);
+  statisticsLayout->addWidget(statisticsTitle);
+  m_advancedStatisticsSummary = new QLabel;
+  m_advancedStatisticsSummary->setWordWrap(true);
+  statisticsLayout->addWidget(m_advancedStatisticsSummary);
+
+  m_advancedStatisticsTable = new QTableWidget(10, 3);
+  m_advancedStatisticsTable->setHorizontalHeaderLabels(
+      {"Resource / event", "Cycles", "%"});
+  m_advancedStatisticsTable->horizontalHeader()->setSectionResizeMode(
+      0, QHeaderView::Stretch);
+  m_advancedStatisticsTable->horizontalHeader()->setSectionResizeMode(
+      1, QHeaderView::ResizeToContents);
+  m_advancedStatisticsTable->horizontalHeader()->setSectionResizeMode(
+      2, QHeaderView::ResizeToContents);
+  m_advancedStatisticsTable->verticalHeader()->setVisible(false);
+  m_advancedStatisticsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+  m_advancedStatisticsTable->setSelectionMode(
+      QAbstractItemView::NoSelection);
+  statisticsLayout->addWidget(m_advancedStatisticsTable);
+
+  m_stallHistoryChart = new StallHistoryChart;
+  auto *rangeLayout = new QHBoxLayout;
+  rangeLayout->addWidget(new QLabel("Show stats between cycle"));
+  m_statisticsRangeStart = new QSpinBox;
+  m_statisticsRangeEnd = new QSpinBox;
+  m_statisticsRangeStart->setRange(1, 1);
+  m_statisticsRangeEnd->setRange(1, 1);
+  rangeLayout->addWidget(m_statisticsRangeStart);
+  rangeLayout->addWidget(new QLabel("and cycle"));
+  rangeLayout->addWidget(m_statisticsRangeEnd);
+  auto *showRangeButton = new QPushButton("Show");
+  auto *clearRangeButton = new QPushButton("Clear");
+  rangeLayout->addWidget(showRangeButton);
+  rangeLayout->addWidget(clearRangeButton);
+  rangeLayout->addStretch();
+  statisticsLayout->addLayout(rangeLayout);
+
+  statisticsLayout->addWidget(m_stallHistoryChart);
+
+  auto *cycleSearchLayout = new QHBoxLayout;
+  cycleSearchLayout->addWidget(new QLabel("Inspect stall cycle:"));
+  m_stallCycleSearch = new QSpinBox;
+  m_stallCycleSearch->setRange(0, 0);
+  m_stallCycleSearch->setSpecialValueText(" ");
+  m_stallCycleSearch->setToolTip("Cycle to inspect");
+  cycleSearchLayout->addWidget(m_stallCycleSearch);
+  auto *searchCycleButton = new QPushButton("Search");
+  auto *clearCycleButton = new QPushButton("Clear");
+  cycleSearchLayout->addWidget(searchCycleButton);
+  cycleSearchLayout->addWidget(clearCycleButton);
+  cycleSearchLayout->addStretch();
+  statisticsLayout->addLayout(cycleSearchLayout);
+  connect(searchCycleButton, &QPushButton::clicked, this, [this] {
+    m_stallHistoryChart->setSelectedCycle(
+        static_cast<uint64_t>(m_stallCycleSearch->value()));
+  });
+  connect(clearCycleButton, &QPushButton::clicked, this, [this] {
+    m_stallCycleSearch->setValue(0);
+    m_stallHistoryChart->setSelectedCycle(0);
+  });
+
+  connect(showRangeButton, &QPushButton::clicked, this, [this] {
+    const uint64_t first = static_cast<uint64_t>(
+        std::min(m_statisticsRangeStart->value(),
+                 m_statisticsRangeEnd->value()));
+    const uint64_t last = static_cast<uint64_t>(
+        std::max(m_statisticsRangeStart->value(),
+                 m_statisticsRangeEnd->value()));
+    m_statisticsRangeEnabled = true;
+    m_stallHistoryChart->setCycleRange(first, last);
+    updateAdvancedStatistics();
+  });
+  connect(clearRangeButton, &QPushButton::clicked, this, [this] {
+    m_statisticsRangeEnabled = false;
+    m_stallHistoryChart->setCycleRange(0, 0);
+    updateAdvancedStatistics();
+  });
 
   updateInstructionModel();
   connect(ProcessorHandler::get(), &ProcessorHandler::procStateChangedNonRun,
@@ -106,6 +418,12 @@ ProcessorTab::ProcessorTab(QToolBar *controlToolbar,
           this, [this] {
             m_reverseAction->setEnabled(m_vsrtlWidget->isReversible() &&
                                         !m_autoClockAction->isChecked());
+            if (m_targetCycle && !m_targetCycle->hasFocus()) {
+              const auto cycle =
+                  ProcessorHandler::getProcessor()->getCycleCount();
+              m_targetCycle->setValue(static_cast<int>(std::min<long long>(
+                  cycle, std::numeric_limits<int>::max())));
+            }
           });
 
   setupSimulatorActions(controlToolbar);
@@ -276,6 +594,24 @@ void ProcessorTab::setupSimulatorActions(QToolBar *controlToolbar) {
   connect(m_runAction, &QAction::toggled, this, &ProcessorTab::run);
   controlToolbar->addAction(m_runAction);
 
+  m_targetCycle = new QSpinBox(this);
+  m_targetCycle->setRange(0, std::numeric_limits<int>::max());
+  m_targetCycle->setPrefix("cycle ");
+  m_targetCycle->setToolTip("Target cycle");
+  if (const auto *processor = ProcessorHandler::getProcessor()) {
+    m_targetCycle->setValue(static_cast<int>(std::min<long long>(
+        processor->getCycleCount(), std::numeric_limits<int>::max())));
+  }
+  controlToolbar->addWidget(m_targetCycle);
+
+  const QIcon goToCycleIcon(":/icons/go-to-cycle.svg");
+  m_goToCycleAction = new QAction(goToCycleIcon, "Go to cycle", this);
+  m_goToCycleAction->setToolTip(
+      "Run or rewind the simulator to the selected cycle");
+  connect(m_goToCycleAction, &QAction::triggered, this,
+          &ProcessorTab::goToCycle);
+  controlToolbar->addAction(m_goToCycleAction);
+
   // Setup processor-tab only actions
   m_displayValuesAction = new QAction("Show processor signal values", this);
   m_displayValuesAction->setCheckable(true);
@@ -294,6 +630,22 @@ void ProcessorTab::setupSimulatorActions(QToolBar *controlToolbar) {
   connect(m_pipelineDiagramAction, &QAction::triggered, this,
           &ProcessorTab::showPipelineDiagram);
   m_toolbar->addAction(m_pipelineDiagramAction);
+
+  const QIcon fpUnicicleIcon(":/icons/unicycle-diagram.svg");
+  m_fpUnicicleDiagramAction =
+      new QAction(fpUnicicleIcon, "Show FP unicicle diagram", this);
+  connect(m_fpUnicicleDiagramAction, &QAction::triggered, this,
+          &ProcessorTab::showFPUnicicleDiagram);
+  m_toolbar->addAction(m_fpUnicicleDiagramAction);
+
+  const QIcon advancedStatisticsIcon(":/icons/advanced-statistics.svg");
+  m_advancedStatisticsAction = new QAction(
+      advancedStatisticsIcon, "Show advanced execution statistics", this);
+  m_advancedStatisticsAction->setToolTip(
+      "Show functional-unit, memory and pipeline stall statistics");
+  connect(m_advancedStatisticsAction, &QAction::triggered, this,
+          &ProcessorTab::showAdvancedStatistics);
+  m_toolbar->addAction(m_advancedStatisticsAction);
 
   m_darkmodeAction = new QAction("Processor darkmode", this);
   m_darkmodeAction->setCheckable(true);
@@ -345,6 +697,205 @@ void ProcessorTab::updateStatistics() {
   // Record timestamp values
   lastUpdateTime = timeNow;
   lastCycleCount = cycleCount;
+  updateAdvancedStatistics();
+}
+
+void ProcessorTab::updateAdvancedStatistics() {
+  if (!m_advancedStatisticsTable || !m_advancedStatisticsSummary)
+    return;
+
+  const auto *processor = ProcessorHandler::getProcessor();
+  const auto statistics = processor->advancedExecutionStatistics();
+  const auto cycles = std::max<long long>(0, processor->getCycleCount());
+  const auto instructions =
+      std::max<long long>(0, processor->getInstructionsRetired());
+
+  if (!statistics.available) {
+    m_advancedStatisticsSummary->setText(
+        "Advanced statistics are not available for this processor.");
+    m_advancedStatisticsTable->setEnabled(false);
+    return;
+  }
+  m_advancedStatisticsTable->setEnabled(true);
+  const int maximumSearchCycle = static_cast<int>(std::min<long long>(
+      cycles, std::numeric_limits<int>::max()));
+  if (m_stallCycleSearch->value() > maximumSearchCycle) {
+    m_stallCycleSearch->setValue(0);
+    m_stallHistoryChart->setSelectedCycle(0);
+  }
+  m_stallCycleSearch->setMaximum(maximumSearchCycle);
+  const int maximumRangeCycle = std::max(1, maximumSearchCycle);
+  m_statisticsRangeStart->setMaximum(maximumRangeCycle);
+  m_statisticsRangeEnd->setMaximum(maximumRangeCycle);
+  if (!m_statisticsRangeEnabled && !m_statisticsRangeEnd->hasFocus())
+    m_statisticsRangeEnd->setValue(maximumRangeCycle);
+  m_stallHistoryChart->setHistories(
+      statistics.dataHazardStallHistory,
+      statistics.structuralHazardStallHistory,
+      statistics.controlHazardStallHistory);
+
+  const uint64_t totalCycles = static_cast<uint64_t>(cycles);
+  uint64_t rangeFirst = 1;
+  uint64_t rangeLast = totalCycles;
+  if (m_statisticsRangeEnabled && totalCycles > 0) {
+    rangeFirst = std::min<uint64_t>(m_statisticsRangeStart->value(),
+                                    totalCycles);
+    rangeLast = std::min<uint64_t>(m_statisticsRangeEnd->value(),
+                                   totalCycles);
+    if (rangeFirst > rangeLast)
+      std::swap(rangeFirst, rangeLast);
+    m_stallHistoryChart->setCycleRange(rangeFirst, rangeLast);
+  } else {
+    m_stallHistoryChart->setCycleRange(0, 0);
+  }
+
+  AdvancedExecutionStatisticsSample displayed;
+  uint64_t displayedCycles = totalCycles;
+  if (m_statisticsRangeEnabled && totalCycles > 0 &&
+      rangeLast <= statistics.cycleHistory.size()) {
+    const auto &after = statistics.cycleHistory.at(rangeLast - 1);
+    const AdvancedExecutionStatisticsSample before =
+        rangeFirst <= 1 ? AdvancedExecutionStatisticsSample{}
+                        : statistics.cycleHistory.at(rangeFirst - 2);
+    displayedCycles = rangeLast - rangeFirst + 1;
+    displayed.instructionMemoryCycles =
+        after.instructionMemoryCycles - before.instructionMemoryCycles;
+    displayed.dataMemoryCycles =
+        after.dataMemoryCycles - before.dataMemoryCycles;
+    displayed.aluCycles = after.aluCycles - before.aluCycles;
+    displayed.integerUnitCycles =
+        after.integerUnitCycles - before.integerUnitCycles;
+    for (std::size_t i = 0;
+         i < displayed.fpAddSubUnitCyclesByInstance.size(); ++i) {
+      displayed.fpAddSubUnitCyclesByInstance[i] =
+          after.fpAddSubUnitCyclesByInstance[i] -
+          before.fpAddSubUnitCyclesByInstance[i];
+      displayed.fpMultiplyUnitCyclesByInstance[i] =
+          after.fpMultiplyUnitCyclesByInstance[i] -
+          before.fpMultiplyUnitCyclesByInstance[i];
+      displayed.fpDivideUnitCyclesByInstance[i] =
+          after.fpDivideUnitCyclesByInstance[i] -
+          before.fpDivideUnitCyclesByInstance[i];
+    }
+    displayed.stallCycles = after.stallCycles - before.stallCycles;
+    displayed.dataHazardStallCycles =
+        after.dataHazardStallCycles - before.dataHazardStallCycles;
+    displayed.structuralHazardStallCycles =
+        after.structuralHazardStallCycles -
+        before.structuralHazardStallCycles;
+    displayed.controlHazardStallCycles =
+        after.controlHazardStallCycles - before.controlHazardStallCycles;
+  } else {
+    displayed.instructionMemoryCycles = statistics.instructionMemoryCycles;
+    displayed.dataMemoryCycles = statistics.dataMemoryCycles;
+    displayed.aluCycles = statistics.aluCycles;
+    displayed.integerUnitCycles = statistics.integerUnitCycles;
+    displayed.fpAddSubUnitCyclesByInstance =
+        statistics.fpAddSubUnitCyclesByInstance;
+    displayed.fpMultiplyUnitCyclesByInstance =
+        statistics.fpMultiplyUnitCyclesByInstance;
+    displayed.fpDivideUnitCyclesByInstance =
+        statistics.fpDivideUnitCyclesByInstance;
+    displayed.stallCycles = statistics.stallCycles;
+    displayed.dataHazardStallCycles = statistics.dataHazardStallCycles;
+    displayed.structuralHazardStallCycles =
+        statistics.structuralHazardStallCycles;
+    displayed.controlHazardStallCycles =
+        statistics.controlHazardStallCycles;
+  }
+
+  const QString cpi =
+      instructions == 0
+          ? "-"
+          : QString::number(static_cast<double>(cycles) / instructions, 'f',
+                            3);
+  const QString rangeSummary =
+      m_statisticsRangeEnabled && totalCycles > 0
+          ? QString(" &nbsp;&nbsp; Range: <b>%1–%2</b>")
+                .arg(rangeFirst)
+                .arg(rangeLast)
+          : QString();
+  m_advancedStatisticsSummary->setText(
+      QString("Instructions: <b>%1</b> &nbsp;&nbsp; Cycles: <b>%2</b> "
+              "&nbsp;&nbsp; CPI: <b>%3</b>%4")
+          .arg(instructions)
+          .arg(cycles)
+          .arg(cpi)
+          .arg(rangeSummary));
+
+  struct Row {
+    QString name;
+    uint64_t value;
+    uint64_t capacity;
+    bool section = false;
+  };
+  std::vector<Row> rows{
+      {"Instruction memory", displayed.instructionMemoryCycles,
+       displayedCycles},
+      {"Data memory", displayed.dataMemoryCycles, displayedCycles},
+      {"ALU (any functional unit)", displayed.aluCycles, displayedCycles,
+       true},
+      {"  Integer unit 1", displayed.integerUnitCycles, displayedCycles},
+  };
+
+  for (unsigned i = 0; i < statistics.fpAddSubUnitCount; ++i) {
+    rows.push_back({QString("  FP add/sub unit %1 (%2 cycles)")
+                        .arg(i + 1)
+                        .arg(statistics.fpAddSubLatency),
+                    displayed.fpAddSubUnitCyclesByInstance.at(i),
+                    displayedCycles});
+  }
+  for (unsigned i = 0; i < statistics.fpMultiplyUnitCount; ++i) {
+    rows.push_back({QString("  FP multiply unit %1 (%2 cycles)")
+                        .arg(i + 1)
+                        .arg(statistics.fpMultiplyLatency),
+                    displayed.fpMultiplyUnitCyclesByInstance.at(i),
+                    displayedCycles});
+  }
+  for (unsigned i = 0; i < statistics.fpDivideUnitCount; ++i) {
+    rows.push_back({QString("  FP divide/sqrt unit %1 (%2 cycles)")
+                        .arg(i + 1)
+                        .arg(statistics.fpDivideLatency),
+                    displayed.fpDivideUnitCyclesByInstance.at(i),
+                    displayedCycles});
+  }
+  rows.push_back(
+      {"Stalls", displayed.stallCycles, displayedCycles, true});
+  rows.push_back(
+      {"  Data hazards (RAW)", displayed.dataHazardStallCycles,
+       displayedCycles});
+  rows.push_back({"  Structural hazards",
+                  displayed.structuralHazardStallCycles, displayedCycles});
+  rows.push_back({"  Control hazards", displayed.controlHazardStallCycles,
+                  displayedCycles});
+
+  m_advancedStatisticsTable->setRowCount(static_cast<int>(rows.size()));
+
+  for (int row = 0; row < static_cast<int>(rows.size()); ++row) {
+    const auto &entry = rows.at(row);
+    const QString percentage =
+        entry.capacity == 0
+            ? "0.00"
+            : QString::number(100.0 * static_cast<double>(entry.value) /
+                                  static_cast<double>(entry.capacity),
+                              'f', 2);
+    auto *nameItem = new QTableWidgetItem(entry.name);
+    auto *cyclesItem =
+        new QTableWidgetItem(QString::number(entry.value));
+    auto *percentageItem = new QTableWidgetItem(percentage);
+    cyclesItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    percentageItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    if (entry.section) {
+      QFont sectionFont = nameItem->font();
+      sectionFont.setBold(true);
+      nameItem->setFont(sectionFont);
+      cyclesItem->setFont(sectionFont);
+      percentageItem->setFont(sectionFont);
+    }
+    m_advancedStatisticsTable->setItem(row, 0, nameItem);
+    m_advancedStatisticsTable->setItem(row, 1, cyclesItem);
+    m_advancedStatisticsTable->setItem(row, 2, percentageItem);
+  }
 }
 
 void ProcessorTab::pause() {
@@ -487,7 +1038,11 @@ void ProcessorTab::enableSimulatorControls() {
   m_runAction->setEnabled(true);
   m_reverseAction->setEnabled(m_vsrtlWidget->isReversible());
   m_resetAction->setEnabled(true);
+  m_goToCycleAction->setEnabled(true);
+  m_targetCycle->setEnabled(true);
   m_pipelineDiagramAction->setEnabled(true);
+  m_fpUnicicleDiagramAction->setEnabled(true);
+  m_advancedStatisticsAction->setEnabled(true);
 }
 
 void ProcessorTab::updateInstructionLabels() {
@@ -552,6 +1107,61 @@ void ProcessorTab::autoClockTimeout() {
   ProcessorHandler::clock();
 }
 
+void ProcessorTab::goToCycle() {
+  if (m_autoClockAction->isChecked())
+    m_autoClockAction->setChecked(false);
+
+  auto *processor = ProcessorHandler::getProcessorNonConst();
+  if (!processor)
+    return;
+
+  auto *vsrtlProcessor = dynamic_cast<vsrtl::SimDesign *>(processor);
+  if (vsrtlProcessor)
+    vsrtlProcessor->setEnableSignals(false);
+
+  const long long target = m_targetCycle->value();
+  if (target < processor->getCycleCount()) {
+    const long long distance = processor->getCycleCount() - target;
+    const long long stackSize =
+        RipesSettings::value(RIPES_SETTING_REWINDSTACKSIZE).toLongLong();
+    if (!(processor->features() & RipesProcessor::isReversible) ||
+        distance > stackSize) {
+      RipesSettings::getObserver(RIPES_GLOBALSIGNAL_REQRESET)->trigger();
+      processor = ProcessorHandler::getProcessorNonConst();
+      vsrtlProcessor = dynamic_cast<vsrtl::SimDesign *>(processor);
+      if (vsrtlProcessor)
+        vsrtlProcessor->setEnableSignals(false);
+    }
+  }
+
+  while (processor->getCycleCount() > target) {
+    const long long before = processor->getCycleCount();
+    processor->reverseProcessor();
+    if (processor->getCycleCount() == before) {
+      RipesSettings::getObserver(RIPES_GLOBALSIGNAL_REQRESET)->trigger();
+      processor = ProcessorHandler::getProcessorNonConst();
+      vsrtlProcessor = dynamic_cast<vsrtl::SimDesign *>(processor);
+      if (vsrtlProcessor)
+        vsrtlProcessor->setEnableSignals(false);
+      break;
+    }
+  }
+  while (processor->getCycleCount() < target && !processor->finished())
+    processor->clock();
+
+  if (vsrtlProcessor)
+    vsrtlProcessor->setEnableSignals(true);
+  updateStatistics();
+  updateInstructionLabels();
+  m_vsrtlWidget->sync();
+  if (processor->finished())
+    processorFinished();
+  else
+    enableSimulatorControls();
+  m_targetCycle->setValue(static_cast<int>(std::min<long long>(
+      processor->getCycleCount(), std::numeric_limits<int>::max())));
+}
+
 void ProcessorTab::autoClock(bool state) {
   const QIcon startAutoClockIcon = QIcon(":/icons/step-clock.svg");
   const QIcon stopAutoTimerIcon = QIcon(":/icons/stop-clock.svg");
@@ -573,8 +1183,12 @@ void ProcessorTab::autoClock(bool state) {
   m_clockAction->setEnabled(!state);
   m_reverseAction->setEnabled(!state);
   m_resetAction->setEnabled(!state);
+  m_goToCycleAction->setEnabled(!state);
+  m_targetCycle->setEnabled(!state);
   m_displayValuesAction->setEnabled(!state);
   m_pipelineDiagramAction->setEnabled(!state);
+  m_fpUnicicleDiagramAction->setEnabled(!state);
+  m_advancedStatisticsAction->setEnabled(!state);
   m_runAction->setEnabled(!state);
 }
 
@@ -597,8 +1211,12 @@ void ProcessorTab::run(bool state) {
   m_autoClockAction->setEnabled(!state);
   m_reverseAction->setEnabled(!state);
   m_resetAction->setEnabled(!state);
+  m_goToCycleAction->setEnabled(!state);
+  m_targetCycle->setEnabled(!state);
   m_displayValuesAction->setEnabled(!state);
   m_pipelineDiagramAction->setEnabled(!state);
+  m_fpUnicicleDiagramAction->setEnabled(!state);
+  m_advancedStatisticsAction->setEnabled(!state);
 
   // Disable widgets which are not updated when running the processor
   m_vsrtlWidget->setEnabled(!state);
@@ -614,5 +1232,19 @@ void ProcessorTab::reverse() {
 void ProcessorTab::showPipelineDiagram() {
   auto w = PipelineDiagramWidget(m_stageModel);
   w.exec();
+}
+
+void ProcessorTab::showFPUnicicleDiagram() {
+  m_fpUnicicleDiagramWidget->refreshDiagram();
+  m_fpUnicicleDiagramWidget->show();
+  m_fpUnicicleDiagramWidget->raise();
+  m_fpUnicicleDiagramWidget->activateWindow();
+}
+
+void ProcessorTab::showAdvancedStatistics() {
+  updateAdvancedStatistics();
+  m_advancedStatisticsDialog->show();
+  m_advancedStatisticsDialog->raise();
+  m_advancedStatisticsDialog->activateWindow();
 }
 } // namespace Ripes

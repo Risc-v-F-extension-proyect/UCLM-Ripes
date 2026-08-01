@@ -277,13 +277,14 @@ public:
 
     memwb_reg->wr_reg_idx_out >> funit->wb_reg_wr_idx;
     memwb_reg->reg_do_write_out >> funit->wb_reg_wr_en;
-    0 >> funit->mem_fp_reg_wr_en;
-    0 >> funit->wb_fp_reg_wr_en;
 
     // -----------------------------------------------------------------------
     // Hazard detection unit
     decode->r1_reg_idx >> hzunit->id_reg1_idx;
     decode->r2_reg_idx >> hzunit->id_reg2_idx;
+    0 >> hzunit->id_reg_wr_idx;
+    0 >> hzunit->id_valid;
+    0 >> hzunit->id_pc;
     decode->opcode >> hzunit->id_opcode;
 
     idex_reg->mem_do_read_out >> hzunit->ex_do_mem_read_en;
@@ -296,7 +297,6 @@ public:
     memwb_reg->reg_do_write_out >> hzunit->wb_do_reg_write;
 
     idex_reg->opcode_out >> hzunit->opcode;
-    0 >> hzunit->falu_stall;
   }
 
   // Design subcomponents

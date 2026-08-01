@@ -108,16 +108,48 @@ void ProgramViewer::updateHighlightedAddresses() {
   for (auto sid : ProcessorHandler::getProcessor()->structure().stageIt()) {
     const auto stageInfo = ProcessorHandler::getProcessor()->stageInfo(sid);
     if (stageInfo.stage_valid) {
+      if (!stageInfo.namedState.isEmpty())
+        continue;
+
       auto block = blockForAddress(stageInfo.pc);
       if (!block.isValid())
         continue;
 
       // Record the stage name for the highlighted block for later painting
       QString stageString = ProcessorHandler::getProcessor()->stageName(sid);
-      if (!stageInfo.namedState.isEmpty())
-        stageString += " (" + stageInfo.namedState + ")";
       highlightBlock(block, colorGenerator(), stageString);
     }
+  }
+
+  for (const auto &fpStage :
+       ProcessorHandler::getProcessor()->fpUnicicleStageInfos()) {
+    if (!fpStage.valid)
+      continue;
+
+    auto block = blockForAddress(fpStage.pc);
+    if (!block.isValid())
+      continue;
+
+    QString prefix;
+    QColor color;
+    switch (fpStage.unit) {
+    case 1:
+      prefix = "A";
+      color = Colors::CyanBlue;
+      break;
+    case 2:
+      prefix = "M";
+      color = Colors::CyanBlue;
+      break;
+    case 3:
+      prefix = "D";
+      color = Colors::CyanBlue;
+      break;
+    default:
+      continue;
+    }
+    highlightBlock(block, color,
+                   prefix + QString::number(fpStage.stage + 1));
   }
 
   if (m_following) {

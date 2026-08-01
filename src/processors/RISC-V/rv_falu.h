@@ -21,12 +21,18 @@ public:
 
     //FALU output
     res << [this] {
-      const uint32_t op1Val = readSingleFromFReg(op1.uValue());
-      const uint32_t op2Val = readSingleFromFReg(op2.uValue());
-      const uint64_t op1DoubleVal = lowerDouble(op1.uValue());
-      const uint64_t op2DoubleVal = lowerDouble(op2.uValue());
+      return execute(ctrl.eValue<FALUOp>(), op1.uValue(), op2.uValue());
+    };
+  }
 
-      switch (ctrl.eValue<FALUOp>()) {
+  static VSRTL_VT_U execute(FALUOp operation, VSRTL_VT_U operand1,
+                            VSRTL_VT_U operand2) {
+      const uint32_t op1Val = readSingleFromFReg(operand1);
+      const uint32_t op2Val = readSingleFromFReg(operand2);
+      const uint64_t op1DoubleVal = lowerDouble(operand1);
+      const uint64_t op2DoubleVal = lowerDouble(operand2);
+
+      switch (operation) {
       case FALUOp::ADD:
         return packSingle(unpackSingle(op1Val) + unpackSingle(op2Val));
       case FALUOp::SUB:
@@ -101,7 +107,6 @@ public:
       default:
         throw std::runtime_error("Invalid FALU opcode");
       }
-    };
   }
 
   INPUTPORT_ENUM(ctrl, FALUOp);

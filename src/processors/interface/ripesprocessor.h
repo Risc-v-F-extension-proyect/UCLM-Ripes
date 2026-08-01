@@ -4,7 +4,10 @@
 
 #include "Signal.h"
 #include "VSRTL/core/vsrtl_design.h"
+#include <array>
+#include <cstdint>
 #include <map>
+#include <vector>
 
 #include "../isa/isa_types.h"
 #include "../isa/isainfo.h"
@@ -28,6 +31,57 @@ struct StageInfo {
            this->state == other.state;
   }
   bool operator!=(const StageInfo &other) const { return !(*this == other); }
+};
+
+struct FPUnicicleStageInfo {
+  bool valid = false;
+  AInt pc = 0;
+  unsigned unit = 0;
+  unsigned stage = 0;
+  unsigned instance = 0;
+};
+
+struct AdvancedExecutionStatisticsSample {
+  uint64_t instructionMemoryCycles = 0;
+  uint64_t dataMemoryCycles = 0;
+  uint64_t aluCycles = 0;
+  uint64_t integerUnitCycles = 0;
+  std::array<uint64_t, 3> fpAddSubUnitCyclesByInstance{};
+  std::array<uint64_t, 3> fpMultiplyUnitCyclesByInstance{};
+  std::array<uint64_t, 3> fpDivideUnitCyclesByInstance{};
+  uint64_t stallCycles = 0;
+  uint64_t dataHazardStallCycles = 0;
+  uint64_t structuralHazardStallCycles = 0;
+  uint64_t controlHazardStallCycles = 0;
+};
+
+struct AdvancedExecutionStatistics {
+  bool available = false;
+  uint64_t instructionMemoryCycles = 0;
+  uint64_t dataMemoryCycles = 0;
+  uint64_t aluCycles = 0;
+  uint64_t integerUnitCycles = 0;
+  uint64_t fpAddSubUnitCycles = 0;
+  uint64_t fpMultiplyUnitCycles = 0;
+  uint64_t fpDivideUnitCycles = 0;
+  std::array<uint64_t, 3> fpAddSubUnitCyclesByInstance{};
+  std::array<uint64_t, 3> fpMultiplyUnitCyclesByInstance{};
+  std::array<uint64_t, 3> fpDivideUnitCyclesByInstance{};
+  uint64_t stallCycles = 0;
+  uint64_t dataHazardStallCycles = 0;
+  uint64_t structuralHazardStallCycles = 0;
+  uint64_t controlHazardStallCycles = 0;
+  std::vector<uint64_t> dataHazardStallHistory;
+  std::vector<uint64_t> structuralHazardStallHistory;
+  std::vector<uint64_t> controlHazardStallHistory;
+  std::vector<AdvancedExecutionStatisticsSample> cycleHistory;
+  unsigned integerUnitCount = 1;
+  unsigned fpAddSubLatency = 1;
+  unsigned fpMultiplyLatency = 1;
+  unsigned fpDivideLatency = 1;
+  unsigned fpAddSubUnitCount = 1;
+  unsigned fpMultiplyUnitCount = 1;
+  unsigned fpDivideUnitCount = 1;
 };
 
 /// Address is byte-aligned, and the accessed bytes are [address : address +
@@ -210,6 +264,13 @@ public:
    * the current cycle
    */
   virtual StageInfo stageInfo(StageIndex stageIndex) const = 0;
+
+  virtual std::vector<FPUnicicleStageInfo> fpUnicicleStageInfos() const {
+    return {};
+  }
+  virtual AdvancedExecutionStatistics advancedExecutionStatistics() const {
+    return {};
+  }
 
   /**
    * @brief breakpointTriggeringStages

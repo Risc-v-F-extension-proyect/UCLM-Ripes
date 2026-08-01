@@ -311,9 +311,6 @@ public:
 
     memwb_reg->wr_reg_idx_out >> funit->wb_reg_wr_idx;
     memwb_reg->reg_do_write_out >> funit->wb_reg_wr_en;
-    0 >> funit->mem_fp_reg_wr_en;
-    0 >> funit->wb_fp_reg_wr_en;
-
     // -----------------------------------------------------------------------
     // Hazard detection unit
     decode->r1_reg_idx >> hzunit->id_reg1_idx;

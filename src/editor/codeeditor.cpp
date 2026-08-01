@@ -453,6 +453,9 @@ void CodeEditor::updateHighlighting() {
     const auto stageInfo = proc->stageInfo(sid);
     QColor stageColor = colorGenerator();
     if (stageInfo.stage_valid) {
+      if (!stageInfo.namedState.isEmpty())
+        continue;
+
       auto mappingIt = sourceMapping.find(stageInfo.pc);
       if (mappingIt == sourceMapping.end()) {
         // No source line registerred for this PC.
@@ -467,10 +470,44 @@ void CodeEditor::updateHighlighting() {
 
         // Record the stage name for the highlighted block for later painting
         QString stageString = ProcessorHandler::getProcessor()->stageName(sid);
-        if (!stageInfo.namedState.isEmpty())
-          stageString += " (" + stageInfo.namedState + ")";
         highlightBlock(block, stageColor, stageString);
       }
+    }
+  }
+
+  for (const auto &fpStage : proc->fpUnicicleStageInfos()) {
+    if (!fpStage.valid)
+      continue;
+
+    const auto mappingIt = sourceMapping.find(fpStage.pc);
+    if (mappingIt == sourceMapping.end())
+      continue;
+
+    QString prefix;
+    QColor stageColor;
+    switch (fpStage.unit) {
+    case 1:
+      prefix = "A";
+      stageColor = Colors::CyanBlue;
+      break;
+    case 2:
+      prefix = "M";
+      stageColor = Colors::CyanBlue;
+      break;
+    case 3:
+      prefix = "D";
+      stageColor = Colors::CyanBlue;
+      break;
+    default:
+      continue;
+    }
+    const QString stageString =
+        prefix + QString::number(fpStage.stage + 1);
+
+    for (const auto sourceLine : mappingIt->second) {
+      const QTextBlock block = document()->findBlockByLineNumber(sourceLine);
+      if (block.isValid())
+        highlightBlock(block, stageColor, stageString);
     }
   }
 }
