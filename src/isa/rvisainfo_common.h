@@ -28,6 +28,7 @@ enum SysCall {
   None = 0,
   PrintInt = 1,
   PrintFloat = 2,
+  PrintDouble = 3,
   PrintStr = 4,
   Exit = 10,
   PrintChar = 11,

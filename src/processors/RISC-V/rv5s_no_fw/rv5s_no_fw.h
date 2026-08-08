@@ -48,6 +48,8 @@ public:
     m_enabledISA = ISAInfoRegistry::getISA<XLenToRVISA<XLEN>()>(extensions);
     decode->setISA(m_enabledISA);
     uncompress->setISA(m_enabledISA);
+    0 >> exmem_reg->do_branch_in;
+    0 >> exmem_reg->control_flow_in;
 
     // -----------------------------------------------------------------------
     // Program counter

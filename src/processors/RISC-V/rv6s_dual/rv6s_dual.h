@@ -55,6 +55,9 @@ public:
     decode_way2->setISA(m_enabledISA);
     decode_way1->setISA(m_enabledISA);
     uncompress_dual->setISA(m_enabledISA);
+    0 >> exmem_reg->do_branch_in;
+    0 >> exmem_reg->control_flow_in;
+    0 >> iiex_reg->badPrediction;
 
     // -----------------------------------------------------------------------
     // Program counter

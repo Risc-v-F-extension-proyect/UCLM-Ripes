@@ -1,6 +1,8 @@
 #include "instructionmodel.h"
 #include <QHeaderView>
 
+#include <algorithm>
+
 #include "processorhandler.h"
 
 namespace Ripes {
@@ -91,6 +93,22 @@ void InstructionModel::updateStageInfo() {
       }
     }
   }
+
+  std::set<AInt> changedExecutionAddresses;
+  for (const auto &stage : m_executionStageInfos) {
+    if (stage.valid)
+      changedExecutionAddresses.insert(stage.pc);
+  }
+  m_executionStageInfos =
+      ProcessorHandler::getProcessor()->fpUnicicleStageInfos();
+  for (const auto &stage : m_executionStageInfos) {
+    if (stage.valid)
+      changedExecutionAddresses.insert(stage.pc);
+  }
+  for (const AInt address : changedExecutionAddresses) {
+    const QModelIndex stageIndex = index(addressToRow(address), Stage);
+    emit dataChanged(stageIndex, stageIndex, {Qt::DisplayRole});
+  }
 }
 
 bool InstructionModel::setData(const QModelIndex &index, const QVariant &value,
@@ -137,7 +155,38 @@ QVariant InstructionModel::stageData(AInt addr) const {
   QStringList stagesForAddr;
   for (const auto &si : m_stageInfos) {
     if ((si.second.pc == addr) && si.second.stage_valid) {
+      const bool representedByExecutionStage =
+          m_stageNames.at(si.first) == "EX" &&
+          std::any_of(m_executionStageInfos.begin(),
+                      m_executionStageInfos.end(),
+                      [addr](const FPUnicicleStageInfo &stage) {
+                        return stage.valid && stage.pc == addr;
+                      });
+      if (representedByExecutionStage)
+        continue;
       stagesForAddr << m_stageNames.at(si.first);
+    }
+  }
+
+  for (const auto &stage : m_executionStageInfos) {
+    if (!stage.valid || stage.pc != addr)
+      continue;
+
+    switch (stage.unit) {
+    case 0:
+      stagesForAddr << "EX";
+      break;
+    case 1:
+      stagesForAddr << "A" + QString::number(stage.stage + 1);
+      break;
+    case 2:
+      stagesForAddr << "M" + QString::number(stage.stage + 1);
+      break;
+    case 3:
+      stagesForAddr << "D" + QString::number(stage.stage + 1);
+      break;
+    default:
+      break;
     }
   }
   if (stagesForAddr.isEmpty()) {
