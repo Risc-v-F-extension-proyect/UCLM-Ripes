@@ -2,14 +2,23 @@
 #include "ui_processortab.h"
 
 #include <QDir>
+#include <QDialog>
 #include <QFontMetrics>
+#include <QHeaderView>
+#include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScrollBar>
 #include <QSpinBox>
 #include <QTemporaryFile>
+#include <QTableWidget>
+#include <QVBoxLayout>
+
+#include <limits>
+#include <vector>
 
 #include "consolewidget.h"
+#include "fpuniciclediagramwidget.h"
 #include "instructionmodel.h"
 #include "pipelinediagrammodel.h"
 #include "pipelinediagramwidget.h"
@@ -24,6 +33,8 @@
 #include "syscall/systemio.h"
 
 #include "VSRTL/graphics/vsrtl_widget.h"
+#include "VSRTL/graphics/vsrtl_view.h"
+#include "VSRTL/core/vsrtl_design.h"
 
 #include "processors/interface/ripesprocessor.h"
 
@@ -96,6 +107,38 @@ ProcessorTab::ProcessorTab(QToolBar *controlToolbar,
   }
 
   m_stageModel = new PipelineDiagramModel(this);
+  m_fpUnicicleDiagramWidget = new FPUnicicleDiagramWidget(this);
+  m_advancedStatisticsDialog = new QDialog(this);
+  m_advancedStatisticsDialog->setWindowFlag(Qt::Window, true);
+  m_advancedStatisticsDialog->setWindowTitle(
+      "Advanced execution statistics");
+  m_advancedStatisticsDialog->resize(680, 520);
+  auto *statisticsLayout = new QVBoxLayout(m_advancedStatisticsDialog);
+  statisticsLayout->setContentsMargins(24, 20, 24, 20);
+  auto *statisticsTitle = new QLabel("Advanced execution statistics");
+  QFont statisticsTitleFont = statisticsTitle->font();
+  statisticsTitleFont.setPointSize(statisticsTitleFont.pointSize() + 4);
+  statisticsTitleFont.setBold(true);
+  statisticsTitle->setFont(statisticsTitleFont);
+  statisticsLayout->addWidget(statisticsTitle);
+  m_advancedStatisticsSummary = new QLabel;
+  m_advancedStatisticsSummary->setWordWrap(true);
+  statisticsLayout->addWidget(m_advancedStatisticsSummary);
+
+  m_advancedStatisticsTable = new QTableWidget(10, 3);
+  m_advancedStatisticsTable->setHorizontalHeaderLabels(
+      {"Resource / event", "Cycles", "%"});
+  m_advancedStatisticsTable->horizontalHeader()->setSectionResizeMode(
+      0, QHeaderView::Stretch);
+  m_advancedStatisticsTable->horizontalHeader()->setSectionResizeMode(
+      1, QHeaderView::ResizeToContents);
+  m_advancedStatisticsTable->horizontalHeader()->setSectionResizeMode(
+      2, QHeaderView::ResizeToContents);
+  m_advancedStatisticsTable->verticalHeader()->setVisible(false);
+  m_advancedStatisticsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+  m_advancedStatisticsTable->setSelectionMode(
+      QAbstractItemView::NoSelection);
+  statisticsLayout->addWidget(m_advancedStatisticsTable);
 
   updateInstructionModel();
   connect(ProcessorHandler::get(), &ProcessorHandler::procStateChangedNonRun,
@@ -106,6 +149,12 @@ ProcessorTab::ProcessorTab(QToolBar *controlToolbar,
           this, [this] {
             m_reverseAction->setEnabled(m_vsrtlWidget->isReversible() &&
                                         !m_autoClockAction->isChecked());
+            if (m_targetCycle && !m_targetCycle->hasFocus()) {
+              const auto cycle =
+                  ProcessorHandler::getProcessor()->getCycleCount();
+              m_targetCycle->setValue(static_cast<int>(std::min<long long>(
+                  cycle, std::numeric_limits<int>::max())));
+            }
           });
 
   setupSimulatorActions(controlToolbar);
@@ -276,6 +325,24 @@ void ProcessorTab::setupSimulatorActions(QToolBar *controlToolbar) {
   connect(m_runAction, &QAction::toggled, this, &ProcessorTab::run);
   controlToolbar->addAction(m_runAction);
 
+  m_targetCycle = new QSpinBox(this);
+  m_targetCycle->setRange(0, std::numeric_limits<int>::max());
+  m_targetCycle->setPrefix("cycle ");
+  m_targetCycle->setToolTip("Target cycle");
+  if (const auto *processor = ProcessorHandler::getProcessor()) {
+    m_targetCycle->setValue(static_cast<int>(std::min<long long>(
+        processor->getCycleCount(), std::numeric_limits<int>::max())));
+  }
+  controlToolbar->addWidget(m_targetCycle);
+
+  const QIcon goToCycleIcon(":/icons/go-to-cycle.svg");
+  m_goToCycleAction = new QAction(goToCycleIcon, "Go to cycle", this);
+  m_goToCycleAction->setToolTip(
+      "Run or rewind the simulator to the selected cycle");
+  connect(m_goToCycleAction, &QAction::triggered, this,
+          &ProcessorTab::goToCycle);
+  controlToolbar->addAction(m_goToCycleAction);
+
   // Setup processor-tab only actions
   m_displayValuesAction = new QAction("Show processor signal values", this);
   m_displayValuesAction->setCheckable(true);
@@ -294,6 +361,22 @@ void ProcessorTab::setupSimulatorActions(QToolBar *controlToolbar) {
   connect(m_pipelineDiagramAction, &QAction::triggered, this,
           &ProcessorTab::showPipelineDiagram);
   m_toolbar->addAction(m_pipelineDiagramAction);
+
+  const QIcon fpUnicicleIcon(":/icons/unicycle-diagram.svg");
+  m_fpUnicicleDiagramAction =
+      new QAction(fpUnicicleIcon, "Show FP unicicle diagram", this);
+  connect(m_fpUnicicleDiagramAction, &QAction::triggered, this,
+          &ProcessorTab::showFPUnicicleDiagram);
+  m_toolbar->addAction(m_fpUnicicleDiagramAction);
+
+  const QIcon advancedStatisticsIcon(":/icons/advanced-statistics.svg");
+  m_advancedStatisticsAction = new QAction(
+      advancedStatisticsIcon, "Show advanced execution statistics", this);
+  m_advancedStatisticsAction->setToolTip(
+      "Show functional-unit, memory and pipeline stall statistics");
+  connect(m_advancedStatisticsAction, &QAction::triggered, this,
+          &ProcessorTab::showAdvancedStatistics);
+  m_toolbar->addAction(m_advancedStatisticsAction);
 
   m_darkmodeAction = new QAction("Processor darkmode", this);
   m_darkmodeAction->setCheckable(true);
@@ -345,6 +428,113 @@ void ProcessorTab::updateStatistics() {
   // Record timestamp values
   lastUpdateTime = timeNow;
   lastCycleCount = cycleCount;
+  updateAdvancedStatistics();
+}
+
+void ProcessorTab::updateAdvancedStatistics() {
+  if (!m_advancedStatisticsTable || !m_advancedStatisticsSummary)
+    return;
+
+  const auto *processor = ProcessorHandler::getProcessor();
+  const auto statistics = processor->advancedExecutionStatistics();
+  const auto cycles = std::max<long long>(0, processor->getCycleCount());
+  const auto instructions =
+      std::max<long long>(0, processor->getInstructionsRetired());
+
+  if (!statistics.available) {
+    m_advancedStatisticsSummary->setText(
+        "Advanced statistics are not available for this processor.");
+    m_advancedStatisticsTable->setEnabled(false);
+    return;
+  }
+  m_advancedStatisticsTable->setEnabled(true);
+
+  const uint64_t totalCycles = static_cast<uint64_t>(cycles);
+
+  const QString cpi =
+      instructions == 0
+          ? "-"
+          : QString::number(static_cast<double>(cycles) / instructions, 'f',
+                            3);
+  m_advancedStatisticsSummary->setText(
+      QString("Instructions: <b>%1</b> &nbsp;&nbsp; Cycles: <b>%2</b> "
+              "&nbsp;&nbsp; CPI: <b>%3</b>")
+          .arg(instructions)
+          .arg(cycles)
+          .arg(cpi));
+
+  struct Row {
+    QString name;
+    uint64_t value;
+    uint64_t capacity;
+    bool section = false;
+  };
+  std::vector<Row> rows{
+      {"Instruction memory", statistics.instructionMemoryCycles, totalCycles},
+      {"Data memory", statistics.dataMemoryCycles, totalCycles},
+      {"ALU (any functional unit)", statistics.aluCycles, totalCycles, true},
+      {"  Integer unit 1", statistics.integerUnitCycles, totalCycles},
+  };
+
+  for (unsigned i = 0; i < statistics.fpAddSubUnitCount; ++i) {
+    rows.push_back({QString("  FP add/sub unit %1 (%2 cycles)")
+                        .arg(i + 1)
+                        .arg(statistics.fpAddSubLatency),
+                    statistics.fpAddSubUnitCyclesByInstance.at(i),
+                    totalCycles});
+  }
+  for (unsigned i = 0; i < statistics.fpMultiplyUnitCount; ++i) {
+    rows.push_back({QString("  FP multiply unit %1 (%2 cycles)")
+                        .arg(i + 1)
+                        .arg(statistics.fpMultiplyLatency),
+                    statistics.fpMultiplyUnitCyclesByInstance.at(i),
+                    totalCycles});
+  }
+  for (unsigned i = 0; i < statistics.fpDivideUnitCount; ++i) {
+    rows.push_back({QString("  FP divide/sqrt unit %1 (%2 cycles)")
+                        .arg(i + 1)
+                        .arg(statistics.fpDivideLatency),
+                    statistics.fpDivideUnitCyclesByInstance.at(i),
+                    totalCycles});
+  }
+  rows.push_back(
+      {"Stalls", statistics.stallCycles, totalCycles, true});
+  rows.push_back(
+      {"  Data hazards (RAW)", statistics.dataHazardStallCycles,
+       totalCycles});
+  rows.push_back({"  Structural hazards",
+                  statistics.structuralHazardStallCycles, totalCycles});
+  rows.push_back({"  Control hazards (discarded instructions)",
+                  statistics.controlHazardDiscardedInstructions,
+                  totalCycles});
+
+  m_advancedStatisticsTable->setRowCount(static_cast<int>(rows.size()));
+
+  for (int row = 0; row < static_cast<int>(rows.size()); ++row) {
+    const auto &entry = rows.at(row);
+    const QString percentage =
+        entry.capacity == 0
+            ? "0.00"
+            : QString::number(100.0 * static_cast<double>(entry.value) /
+                                  static_cast<double>(entry.capacity),
+                              'f', 2);
+    auto *nameItem = new QTableWidgetItem(entry.name);
+    auto *cyclesItem =
+        new QTableWidgetItem(QString::number(entry.value));
+    auto *percentageItem = new QTableWidgetItem(percentage);
+    cyclesItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    percentageItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    if (entry.section) {
+      QFont sectionFont = nameItem->font();
+      sectionFont.setBold(true);
+      nameItem->setFont(sectionFont);
+      cyclesItem->setFont(sectionFont);
+      percentageItem->setFont(sectionFont);
+    }
+    m_advancedStatisticsTable->setItem(row, 0, nameItem);
+    m_advancedStatisticsTable->setItem(row, 1, cyclesItem);
+    m_advancedStatisticsTable->setItem(row, 2, percentageItem);
+  }
 }
 
 void ProcessorTab::pause() {
@@ -375,7 +565,13 @@ void ProcessorTab::loadProcessorToWidget(const Layout *layout) {
     loadLayout(*layout);
   }
   updateInstructionLabels();
-  fitToScreen();
+  QTimer::singleShot(0, m_vsrtlWidget, [this] {
+    fitToScreen();
+    if (auto *view = m_vsrtlWidget->findChild<vsrtl::VSRTLView *>()) {
+      QMetaObject::invokeMethod(view, "zoomIn", Qt::DirectConnection,
+                                Q_ARG(double, 0.0));
+    }
+  });
 }
 
 void ProcessorTab::processorSelection() {
@@ -487,7 +683,11 @@ void ProcessorTab::enableSimulatorControls() {
   m_runAction->setEnabled(true);
   m_reverseAction->setEnabled(m_vsrtlWidget->isReversible());
   m_resetAction->setEnabled(true);
+  m_goToCycleAction->setEnabled(true);
+  m_targetCycle->setEnabled(true);
   m_pipelineDiagramAction->setEnabled(true);
+  m_fpUnicicleDiagramAction->setEnabled(true);
+  m_advancedStatisticsAction->setEnabled(true);
 }
 
 void ProcessorTab::updateInstructionLabels() {
@@ -552,6 +752,61 @@ void ProcessorTab::autoClockTimeout() {
   ProcessorHandler::clock();
 }
 
+void ProcessorTab::goToCycle() {
+  if (m_autoClockAction->isChecked())
+    m_autoClockAction->setChecked(false);
+
+  auto *processor = ProcessorHandler::getProcessorNonConst();
+  if (!processor)
+    return;
+
+  auto *vsrtlProcessor = dynamic_cast<vsrtl::SimDesign *>(processor);
+  if (vsrtlProcessor)
+    vsrtlProcessor->setEnableSignals(false);
+
+  const long long target = m_targetCycle->value();
+  if (target < processor->getCycleCount()) {
+    const long long distance = processor->getCycleCount() - target;
+    const long long stackSize =
+        RipesSettings::value(RIPES_SETTING_REWINDSTACKSIZE).toLongLong();
+    if (!(processor->features() & RipesProcessor::isReversible) ||
+        distance > stackSize) {
+      RipesSettings::getObserver(RIPES_GLOBALSIGNAL_REQRESET)->trigger();
+      processor = ProcessorHandler::getProcessorNonConst();
+      vsrtlProcessor = dynamic_cast<vsrtl::SimDesign *>(processor);
+      if (vsrtlProcessor)
+        vsrtlProcessor->setEnableSignals(false);
+    }
+  }
+
+  while (processor->getCycleCount() > target) {
+    const long long before = processor->getCycleCount();
+    processor->reverseProcessor();
+    if (processor->getCycleCount() == before) {
+      RipesSettings::getObserver(RIPES_GLOBALSIGNAL_REQRESET)->trigger();
+      processor = ProcessorHandler::getProcessorNonConst();
+      vsrtlProcessor = dynamic_cast<vsrtl::SimDesign *>(processor);
+      if (vsrtlProcessor)
+        vsrtlProcessor->setEnableSignals(false);
+      break;
+    }
+  }
+  while (processor->getCycleCount() < target && !processor->finished())
+    processor->clock();
+
+  if (vsrtlProcessor)
+    vsrtlProcessor->setEnableSignals(true);
+  updateStatistics();
+  updateInstructionLabels();
+  m_vsrtlWidget->sync();
+  if (processor->finished())
+    processorFinished();
+  else
+    enableSimulatorControls();
+  m_targetCycle->setValue(static_cast<int>(std::min<long long>(
+      processor->getCycleCount(), std::numeric_limits<int>::max())));
+}
+
 void ProcessorTab::autoClock(bool state) {
   const QIcon startAutoClockIcon = QIcon(":/icons/step-clock.svg");
   const QIcon stopAutoTimerIcon = QIcon(":/icons/stop-clock.svg");
@@ -573,8 +828,12 @@ void ProcessorTab::autoClock(bool state) {
   m_clockAction->setEnabled(!state);
   m_reverseAction->setEnabled(!state);
   m_resetAction->setEnabled(!state);
+  m_goToCycleAction->setEnabled(!state);
+  m_targetCycle->setEnabled(!state);
   m_displayValuesAction->setEnabled(!state);
   m_pipelineDiagramAction->setEnabled(!state);
+  m_fpUnicicleDiagramAction->setEnabled(!state);
+  m_advancedStatisticsAction->setEnabled(!state);
   m_runAction->setEnabled(!state);
 }
 
@@ -597,8 +856,12 @@ void ProcessorTab::run(bool state) {
   m_autoClockAction->setEnabled(!state);
   m_reverseAction->setEnabled(!state);
   m_resetAction->setEnabled(!state);
+  m_goToCycleAction->setEnabled(!state);
+  m_targetCycle->setEnabled(!state);
   m_displayValuesAction->setEnabled(!state);
   m_pipelineDiagramAction->setEnabled(!state);
+  m_fpUnicicleDiagramAction->setEnabled(!state);
+  m_advancedStatisticsAction->setEnabled(!state);
 
   // Disable widgets which are not updated when running the processor
   m_vsrtlWidget->setEnabled(!state);
@@ -614,5 +877,21 @@ void ProcessorTab::reverse() {
 void ProcessorTab::showPipelineDiagram() {
   auto w = PipelineDiagramWidget(m_stageModel);
   w.exec();
+}
+
+void ProcessorTab::showFPUnicicleDiagram() {
+  m_fpUnicicleDiagramWidget->show();
+  m_fpUnicicleDiagramWidget->raise();
+  m_fpUnicicleDiagramWidget->activateWindow();
+  QTimer::singleShot(0, m_fpUnicicleDiagramWidget, [this] {
+    m_fpUnicicleDiagramWidget->refreshDiagram();
+  });
+}
+
+void ProcessorTab::showAdvancedStatistics() {
+  updateAdvancedStatistics();
+  m_advancedStatisticsDialog->show();
+  m_advancedStatisticsDialog->raise();
+  m_advancedStatisticsDialog->activateWindow();
 }
 } // namespace Ripes

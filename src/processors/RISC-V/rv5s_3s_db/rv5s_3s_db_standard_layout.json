@@ -217,8 +217,8 @@
                     "str": "ALU"
                 },
                 "Pos": {
-                    "x": 36.521899250127038,
-                    "y": 70.51442560391333
+                    "x": 36.521899250127035,
+                    "y": 70.51442560391332
                 },
                 "Alignment": 132
             },
@@ -648,8 +648,8 @@
                     "str": "alu_op2_src"
                 },
                 "Pos": {
-                    "x": 20.331293782409224,
-                    "y": -18.329627717156684
+                    "x": 20.331293782409222,
+                    "y": -18.329627717156683
                 },
                 "Alignment": 132
             },
@@ -980,8 +980,8 @@
                     {
                         "key": 1,
                         "value": [
-                            "do_branch_in",
-                            "memwb_reg"
+                            "in_0",
+                            "mem_branch_defer_or"
                         ]
                     }
                 ],
@@ -1158,7 +1158,7 @@
                         "str": "Branch\ntaken"
                     },
                     "Pos": {
-                        "x": 25.902584645713206,
+                        "x": 25.902584645713205,
                         "y": 26.01650996829278
                     },
                     "Alignment": 2
@@ -1215,8 +1215,8 @@
                     "str": "Branch"
                 },
                 "Pos": {
-                    "x": 4.2257931285598719,
-                    "y": 1.0050990179852875
+                    "x": 4.2257931285598715,
+                    "y": 1.0050990179852874
                 },
                 "Alignment": 132
             },
@@ -2252,8 +2252,8 @@
                         "str": "Data\nin"
                     },
                     "Pos": {
-                        "x": -0.14589531643900956,
-                        "y": 52.952201285613117
+                        "x": -0.14589531643900955,
+                        "y": 52.952201285613114
                     },
                     "Alignment": 1
                 },
@@ -2317,7 +2317,7 @@
                     },
                     "Pos": {
                         "x": 0.9093023486095717,
-                        "y": 31.251133278021827
+                        "y": 31.251133278021825
                     },
                     "Alignment": 132
                 },
@@ -2349,7 +2349,7 @@
                     },
                     "Pos": {
                         "x": 119.5337089635309,
-                        "y": 24.374332955003184
+                        "y": 24.374332955003183
                     },
                     "Alignment": 2
                 },
@@ -2362,7 +2362,7 @@
                         "str": "0x00000000"
                     },
                     "Pos": {
-                        "x": 1320.1657410243709,
+                        "x": 1320.1657410243708,
                         "y": 346.6845366683177
                     },
                     "Alignment": 132
@@ -3617,8 +3617,8 @@
                         "str": "opcode"
                     },
                     "Pos": {
-                        "x": 24.838388458225724,
-                        "y": 56.968844102148867
+                        "x": 24.838388458225722,
+                        "y": 56.968844102148864
                     },
                     "Alignment": 132
                 },
@@ -3885,7 +3885,7 @@
                     "str": "Decode"
                 },
                 "Pos": {
-                    "x": 2.3266707736736409,
+                    "x": 2.3266707736736407,
                     "y": 4.232271124655789
                 },
                 "Alignment": 132
@@ -10965,6 +10965,13 @@
                             "enable",
                             "ifid_reg"
                         ]
+                    },
+                    {
+                        "key": 3,
+                        "value": [
+                            "flowEnable",
+                            "pcPersistence"
+                        ]
                     }
                 ],
                 "points": [],
@@ -10976,6 +10983,10 @@
                     {
                         "first": 0,
                         "second": 1
+                    },
+                    {
+                        "first": 0,
+                        "second": 3
                     }
                 ]
             },
@@ -20520,7 +20531,7 @@
                         "str": "clear"
                     },
                     "Pos": {
-                        "x": 5.7432218812676869,
+                        "x": 5.7432218812676865,
                         "y": 423.1318000246272
                     },
                     "Alignment": 1
@@ -22111,7 +22122,7 @@
                 },
                 "Pos": {
                     "x": 0.7333915817991965,
-                    "y": 212.06744780858794
+                    "y": 212.06744780858793
                 },
                 "Alignment": 132
             },
@@ -22290,7 +22301,7 @@
                     "str": "Imm."
                 },
                 "Pos": {
-                    "x": 0.44164822382185778,
+                    "x": 0.44164822382185775,
                     "y": 10.336204707862038
                 },
                 "Alignment": 132
@@ -22431,7 +22442,7 @@
                     "str": "Instr.\nmemory"
                 },
                 "Pos": {
-                    "x": 24.827277943774506,
+                    "x": 24.827277943774504,
                     "y": 20.04064769237194
                 },
                 "Alignment": 132
@@ -25553,6 +25564,13 @@
                             "in_1",
                             "pc_alu_src"
                         ]
+                    },
+                    {
+                        "key": 7,
+                        "value": [
+                            "branchTarget",
+                            "pcPersistence"
+                        ]
                     }
                 ],
                 "points": [
@@ -25609,6 +25627,10 @@
                     {
                         "first": 3,
                         "second": 5
+                    },
+                    {
+                        "first": 0,
+                        "second": 7
                     }
                 ]
             },
@@ -25674,6 +25696,13 @@
                             "select",
                             "pc_alu_src"
                         ]
+                    },
+                    {
+                        "key": 7,
+                        "value": [
+                            "branchTaken",
+                            "pcPersistence"
+                        ]
                     }
                 ],
                 "points": [
@@ -25730,6 +25759,10 @@
                     {
                         "first": 5,
                         "second": 3
+                    },
+                    {
+                        "first": 0,
+                        "second": 7
                     }
                 ]
             },
@@ -25915,7 +25948,7 @@
                 },
                 "Pos": {
                     "x": -3.862376096445132,
-                    "y": 205.43505504659113
+                    "y": 205.43505504659112
                 },
                 "Alignment": 132
             },
@@ -26016,8 +26049,8 @@
                         "str": "0x00000004"
                     },
                     "Pos": {
-                        "x": 137.80696725831184,
-                        "y": 154.61016492173602
+                        "x": 137.80696725831183,
+                        "y": 154.61016492173601
                     },
                     "Alignment": 1
                 },
@@ -26321,38 +26354,15 @@
                     {
                         "key": 1,
                         "value": [
-                            "in_1",
-                            "pc_src"
+                            "in_0",
+                            "pending_pc_src"
                         ]
                     }
                 ],
-                "points": [
-                    {
-                        "key": 2,
-                        "value": {
-                            "x": 14,
-                            "y": 448
-                        }
-                    },
-                    {
-                        "key": 3,
-                        "value": {
-                            "x": 14,
-                            "y": 462
-                        }
-                    }
-                ],
+                "points": [],
                 "wires": [
                     {
                         "first": 0,
-                        "second": 3
-                    },
-                    {
-                        "first": 3,
-                        "second": 2
-                    },
-                    {
-                        "first": 2,
                         "second": 1
                     }
                 ]
@@ -26366,7 +26376,7 @@
                     "str": "pc_alu_src"
                 },
                 "Pos": {
-                    "x": -2.3844943135661937,
+                    "x": -2.3844943135661936,
                     "y": 56.14459788789611
                 },
                 "Alignment": 132
@@ -26445,8 +26455,8 @@
                         "str": "4"
                     },
                     "Pos": {
-                        "x": 51.981813524590169,
-                        "y": 141.49999999999998
+                        "x": 51.981813524590166,
+                        "y": 141.49999999999997
                     },
                     "Alignment": 132
                 },
@@ -26464,7 +26474,7 @@
                     },
                     "Pos": {
                         "x": 14.0,
-                        "y": 58.522200328710287
+                        "y": 58.522200328710284
                     },
                     "Alignment": 132
                 },
@@ -26509,8 +26519,8 @@
                         "str": "2"
                     },
                     "Pos": {
-                        "x": 52.981813524590169,
-                        "y": 169.49999999999998
+                        "x": 52.981813524590166,
+                        "y": 169.49999999999997
                     },
                     "Alignment": 132
                 },
@@ -26528,7 +26538,7 @@
                     },
                     "Pos": {
                         "x": 28.0,
-                        "y": 28.765610684134886
+                        "y": 28.765610684134884
                     },
                     "Alignment": 132
                 },
@@ -26585,7 +26595,7 @@
                 },
                 "Pos": {
                     "x": -3.880208333333333,
-                    "y": -27.765610684134886
+                    "y": -27.765610684134884
                 },
                 "Alignment": 132
             },
@@ -26691,7 +26701,7 @@
                     },
                     "Pos": {
                         "x": 52.31038184967923,
-                        "y": 282.40836906066689
+                        "y": 282.40836906066687
                     },
                     "Alignment": 132
                 },
@@ -26709,7 +26719,7 @@
                     },
                     "Pos": {
                         "x": 4.21088510270539,
-                        "y": 39.869215389883098
+                        "y": 39.869215389883095
                     },
                     "Alignment": 132
                 },
@@ -26857,7 +26867,7 @@
                 "x": 0,
                 "y": 0,
                 "w": 2,
-                "h": 3
+                "h": 4
             },
             "rot": 0,
             "Pos": {
@@ -26872,11 +26882,15 @@
                     "value": [
                         {
                             "key": "in_0",
-                            "value": 2
+                            "value": 1
                         },
                         {
                             "key": "in_1",
-                            "value": 1
+                            "value": 2
+                        },
+                        {
+                            "key": "in_2",
+                            "value": 3
                         }
                     ]
                 },
@@ -27034,11 +27048,43 @@
                 },
                 "Pos": {
                     "x": -58.42699795081967,
-                    "y": -26.934426229508177
+                    "y": -26.934426229508176
                 },
                 "Alignment": 132
             },
-            "Indicators": []
+            "Indicators": [],
+            "in_2": {
+                "Label": {
+                    "Visible": false,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 8,
+                    "Text": {
+                        "str": "in_2"
+                    },
+                    "Pos": {
+                        "x": 0.0,
+                        "y": 42.0
+                    },
+                    "Alignment": 132
+                },
+                "ValueLabel": {
+                    "Visible": false,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 10,
+                    "Text": {
+                        "str": "0x0"
+                    },
+                    "Pos": {
+                        "x": 168,
+                        "y": 518.0
+                    },
+                    "Alignment": 132
+                },
+                "UserHidden": false,
+                "PortWidthVisible": false
+            }
         },
         "pc_src": {
             "Top name": "pc_src",
@@ -28233,7 +28279,7 @@
                     },
                     "Pos": {
                         "x": 6.993452070224407,
-                        "y": 82.84330471768107
+                        "y": 82.84330471768106
                     },
                     "Alignment": 1
                 },
@@ -28265,7 +28311,7 @@
                     },
                     "Pos": {
                         "x": 0.5345901125401724,
-                        "y": 18.263159213524888
+                        "y": 18.263159213524887
                     },
                     "Alignment": 1
                 },
@@ -28360,7 +28406,7 @@
                         "str": "R2 idx"
                     },
                     "Pos": {
-                        "x": 0.15226674257860396,
+                        "x": 0.15226674257860395,
                         "y": 59.97278999814
                     },
                     "Alignment": 1
@@ -28393,7 +28439,7 @@
                     },
                     "Pos": {
                         "x": 116.65561724480051,
-                        "y": 16.645620756209497
+                        "y": 16.645620756209496
                     },
                     "Alignment": 2
                 },
@@ -29277,7 +29323,7 @@
                     "str": "Registers"
                 },
                 "Pos": {
-                    "x": 38.904994849204857,
+                    "x": 38.904994849204854,
                     "y": 0.3017634330627956
                 },
                 "Alignment": 132
@@ -29372,7 +29418,7 @@
                         "str": "exp_instr"
                     },
                     "Pos": {
-                        "x": 57.516896548542039,
+                        "x": 57.516896548542036,
                         "y": 89.79390805340194
                     },
                     "Alignment": 132
@@ -29499,7 +29545,7 @@
                     "str": "Compressed\ndecoder"
                 },
                 "Pos": {
-                    "x": 1.4627883998125456,
+                    "x": 1.4627883998125455,
                     "y": 0.8411168707955099
                 },
                 "Alignment": 132
@@ -29520,6 +29566,533 @@
             },
             "Alignment": 132
         },
-        "Indicators": []
+        "Indicators": [],
+        "pending_pc_src": {
+            "Top name": "pending_pc_src",
+            "Rect": {
+                "x": 0,
+                "y": 0,
+                "w": 2,
+                "h": 4
+            },
+            "rot": 180,
+            "Pos": {
+                "x": 70,
+                "y": 434
+            },
+            "Visible": true,
+            "User hidden": false,
+            "Component border": [
+                {
+                    "key": 0,
+                    "value": [
+                        {
+                            "key": "out",
+                            "value": 2
+                        }
+                    ]
+                },
+                {
+                    "key": 1,
+                    "value": [
+                        {
+                            "key": "in_0",
+                            "value": 1
+                        },
+                        {
+                            "key": "in_1",
+                            "value": 3
+                        }
+                    ]
+                },
+                {
+                    "key": 2,
+                    "value": [
+                        {
+                            "key": "select",
+                            "value": 1
+                        }
+                    ]
+                }
+            ],
+            "select": {
+                "Label": {
+                    "Visible": false,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 8,
+                    "Text": {
+                        "str": "select"
+                    },
+                    "Pos": {
+                        "x": 14.0,
+                        "y": 0.0
+                    },
+                    "Alignment": 132
+                },
+                "ValueLabel": {
+                    "Visible": false,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 10,
+                    "Text": {
+                        "str": "0x0"
+                    },
+                    "Pos": {
+                        "x": 168.0,
+                        "y": 434.0
+                    },
+                    "Alignment": 132
+                },
+                "UserHidden": false,
+                "PortWidthVisible": true
+            },
+            "in_0": {
+                "Label": {
+                    "Visible": false,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 8,
+                    "Text": {
+                        "str": "in_0"
+                    },
+                    "Pos": {
+                        "x": 28.0,
+                        "y": 14.0
+                    },
+                    "Alignment": 132
+                },
+                "ValueLabel": {
+                    "Visible": false,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 10,
+                    "Text": {
+                        "str": "0xdeadbeef"
+                    },
+                    "Pos": {
+                        "x": 182.0,
+                        "y": 448.0
+                    },
+                    "Alignment": 132
+                },
+                "UserHidden": false,
+                "PortWidthVisible": true
+            },
+            "in_1": {
+                "Label": {
+                    "Visible": false,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 8,
+                    "Text": {
+                        "str": "in_1"
+                    },
+                    "Pos": {
+                        "x": 28.0,
+                        "y": 42.0
+                    },
+                    "Alignment": 132
+                },
+                "ValueLabel": {
+                    "Visible": false,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 10,
+                    "Text": {
+                        "str": "0x7fffffec"
+                    },
+                    "Pos": {
+                        "x": 182.0,
+                        "y": 476.0
+                    },
+                    "Alignment": 132
+                },
+                "UserHidden": false,
+                "PortWidthVisible": true
+            },
+            "out": {
+                "Label": {
+                    "Visible": false,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 8,
+                    "Text": {
+                        "str": "out"
+                    },
+                    "Pos": {
+                        "x": 0.0,
+                        "y": 28.0
+                    },
+                    "Alignment": 132
+                },
+                "ValueLabel": {
+                    "Visible": false,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 10,
+                    "Text": {
+                        "str": "0xdeadbeef"
+                    },
+                    "Pos": {
+                        "x": 154.0,
+                        "y": 462.0
+                    },
+                    "Alignment": 132
+                },
+                "UserHidden": false,
+                "PortWidthVisible": true
+            },
+            "out_out_wire": {
+                "Parent": "5-Stage RISC-V Processor (3-slot delayed branch)",
+                "From port": {
+                    "first": 0,
+                    "second": [
+                        "out",
+                        "pending_pc_src"
+                    ]
+                },
+                "To ports": [
+                    {
+                        "key": 1,
+                        "value": [
+                            "in_1",
+                            "pc_src"
+                        ]
+                    }
+                ],
+                "points": [
+                    {
+                        "key": 2,
+                        "value": {
+                            "x": 14,
+                            "y": 448
+                        }
+                    },
+                    {
+                        "key": 3,
+                        "value": {
+                            "x": 14,
+                            "y": 462
+                        }
+                    }
+                ],
+                "wires": [
+                    {
+                        "first": 0,
+                        "second": 3
+                    },
+                    {
+                        "first": 3,
+                        "second": 2
+                    },
+                    {
+                        "first": 2,
+                        "second": 1
+                    }
+                ]
+            },
+            "Name label": {
+                "Visible": true,
+                "Bold": false,
+                "Italic": false,
+                "PtSize": 12,
+                "Text": {
+                    "str": "pending_pc_src"
+                },
+                "Pos": {
+                    "x": -27.485025369403274,
+                    "y": 55.33868140154152
+                },
+                "Alignment": 132
+            },
+            "Indicators": []
+        },
+        "pcPersistence": {
+            "Top name": "pcPersistence",
+            "Rect": {
+                "x": 0,
+                "y": 0,
+                "w": 16,
+                "h": 4
+            },
+            "rot": 0,
+            "Pos": {
+                "x": 1218,
+                "y": 504
+            },
+            "Visible": true,
+            "User hidden": false,
+            "Component border": [
+                {
+                    "key": 0,
+                    "value": [
+                        {
+                            "key": "branchTaken",
+                            "value": 1
+                        },
+                        {
+                            "key": "branchTarget",
+                            "value": 2
+                        },
+                        {
+                            "key": "flowEnable",
+                            "value": 3
+                        }
+                    ]
+                },
+                {
+                    "key": 1,
+                    "value": [
+                        {
+                            "key": "pendingValid",
+                            "value": 1
+                        },
+                        {
+                            "key": "pendingPC",
+                            "value": 3
+                        }
+                    ]
+                }
+            ],
+            "Name label": {
+                "Visible": true,
+                "Bold": false,
+                "Italic": false,
+                "PtSize": 12,
+                "Text": {
+                    "str": "pcPersistence"
+                },
+                "Pos": {
+                    "x": -57.34375,
+                    "y": -28.0
+                },
+                "Alignment": 132
+            },
+            "Indicators": [],
+            "branchTaken": {
+                "Label": {
+                    "Visible": true,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 8,
+                    "Text": {
+                        "str": "branchTaken"
+                    },
+                    "Pos": {
+                        "x": -5.0,
+                        "y": 14.0
+                    },
+                    "Alignment": 132
+                },
+                "ValueLabel": {
+                    "Visible": false,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 10,
+                    "Text": {
+                        "str": "0x0"
+                    },
+                    "Pos": {
+                        "x": 1218,
+                        "y": 518.0
+                    },
+                    "Alignment": 132
+                },
+                "UserHidden": false,
+                "PortWidthVisible": true
+            },
+            "branchTarget": {
+                "Label": {
+                    "Visible": true,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 8,
+                    "Text": {
+                        "str": "branchTarget"
+                    },
+                    "Pos": {
+                        "x": -5.0,
+                        "y": 28.0
+                    },
+                    "Alignment": 132
+                },
+                "ValueLabel": {
+                    "Visible": false,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 10,
+                    "Text": {
+                        "str": "0x0000000000000000"
+                    },
+                    "Pos": {
+                        "x": 1218,
+                        "y": 532.0
+                    },
+                    "Alignment": 132
+                },
+                "UserHidden": false,
+                "PortWidthVisible": true
+            },
+            "flowEnable": {
+                "Label": {
+                    "Visible": true,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 8,
+                    "Text": {
+                        "str": "flowEnable"
+                    },
+                    "Pos": {
+                        "x": -5.0,
+                        "y": 42.0
+                    },
+                    "Alignment": 132
+                },
+                "ValueLabel": {
+                    "Visible": false,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 10,
+                    "Text": {
+                        "str": "0x0"
+                    },
+                    "Pos": {
+                        "x": 1218,
+                        "y": 546.0
+                    },
+                    "Alignment": 132
+                },
+                "UserHidden": false,
+                "PortWidthVisible": true
+            },
+            "pendingValid": {
+                "Label": {
+                    "Visible": true,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 8,
+                    "Text": {
+                        "str": "pendingValid"
+                    },
+                    "Pos": {
+                        "x": 224.0,
+                        "y": 14.0
+                    },
+                    "Alignment": 132
+                },
+                "ValueLabel": {
+                    "Visible": false,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 10,
+                    "Text": {
+                        "str": "0x0"
+                    },
+                    "Pos": {
+                        "x": 1442.0,
+                        "y": 518.0
+                    },
+                    "Alignment": 132
+                },
+                "UserHidden": false,
+                "PortWidthVisible": true
+            },
+            "pendingPC": {
+                "Label": {
+                    "Visible": true,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 8,
+                    "Text": {
+                        "str": "pendingPC"
+                    },
+                    "Pos": {
+                        "x": 224.0,
+                        "y": 42.0
+                    },
+                    "Alignment": 132
+                },
+                "ValueLabel": {
+                    "Visible": false,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 10,
+                    "Text": {
+                        "str": "0x0000000000000000"
+                    },
+                    "Pos": {
+                        "x": 1442.0,
+                        "y": 546.0
+                    },
+                    "Alignment": 132
+                },
+                "UserHidden": false,
+                "PortWidthVisible": true
+            },
+            "pendingValid_out_wire": {
+                "Parent": "5-Stage RISC-V Processor (3-slot delayed branch)",
+                "From port": {
+                    "first": 0,
+                    "second": [
+                        "pendingValid",
+                        "pcPersistence"
+                    ]
+                },
+                "To ports": [
+                    {
+                        "key": 1,
+                        "value": [
+                            "in_2",
+                            "pc_select_or"
+                        ]
+                    },
+                    {
+                        "key": 2,
+                        "value": [
+                            "select",
+                            "pending_pc_src"
+                        ]
+                    }
+                ],
+                "points": [],
+                "wires": [
+                    {
+                        "first": 0,
+                        "second": 1
+                    },
+                    {
+                        "first": 0,
+                        "second": 2
+                    }
+                ]
+            },
+            "pendingPC_out_wire": {
+                "Parent": "5-Stage RISC-V Processor (3-slot delayed branch)",
+                "From port": {
+                    "first": 0,
+                    "second": [
+                        "pendingPC",
+                        "pcPersistence"
+                    ]
+                },
+                "To ports": [
+                    {
+                        "key": 1,
+                        "value": [
+                            "in_1",
+                            "pending_pc_src"
+                        ]
+                    }
+                ],
+                "points": [],
+                "wires": [
+                    {
+                        "first": 0,
+                        "second": 1
+                    }
+                ]
+            }
+        }
     }
 }

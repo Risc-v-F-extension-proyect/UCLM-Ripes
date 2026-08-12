@@ -16,13 +16,13 @@
 #include "processors/RISC-V/rv_decode.h"
 #include "processors/RISC-V/rv_ecallchecker.h"
 #include "processors/RISC-V/rv_falu.h"
-#include "processors/RISC-V/rv_falu_latency.h"
 #include "processors/RISC-V/rv_fregisterfile.h"
 #include "processors/RISC-V/rv_immediate.h"
 #include "processors/RISC-V/rv_memory.h"
 #include "processors/RISC-V/rv_registerfile.h"
 #include "processors/RISC-V/rv_uncompress.h"
 #include "processors/RISC-V/rv_unified_reg_wr_src_adapter.h"
+#include "../rv5s_3s_db/rv5s_3s_db_pcpersistence.h"
 #include "ripessettings.h"
 
 // Stage separating registers
@@ -35,9 +35,23 @@
 #include "rv5s_forwardingunit.h"
 #include "rv5s_hazardunit.h"
 
+#include <deque>
+
 namespace vsrtl {
 namespace core {
 using namespace Ripes;
+
+template <unsigned XLEN>
+class RV5SAddressAdapter : public Component {
+public:
+  RV5SAddressAdapter(const std::string &name, SimComponent *parent)
+      : Component(name, parent) {
+    out << [this] { return in.uValue(); };
+  }
+
+  INPUTPORT(in, XLEN);
+  OUTPUTPORT(out, 64);
+};
 
 template <typename XLEN_T>
 class RV5S : public RipesVSRTLProcessor {
@@ -53,10 +67,17 @@ public:
     m_enabledISA = ISAInfoRegistry::getISA<XLenToRVISA<XLEN>()>(extensions);
     decode->setISA(m_enabledISA);
     uncompress->setISA(m_enabledISA);
-    falu_latency->setLatencies(
-        RipesSettings::value(RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY).toUInt(),
-        RipesSettings::value(RIPES_SETTING_RV5S_FALU_MUL_LATENCY).toUInt(),
-        RipesSettings::value(RIPES_SETTING_RV5S_FALU_DIV_LATENCY).toUInt());
+    0 >> exmem_reg->do_branch_in;
+    0 >> exmem_reg->control_flow_in;
+    const bool fpEnabled = extensions.contains("F");
+    idex_reg->setFPExtensionEnabled(fpEnabled);
+    exmem_reg->setFPExtensionEnabled(fpEnabled);
+    hzunit->setFPExtensionEnabled(fpEnabled);
+    pcPersistence->setEnabled(false);
+
+    0 >> pcPersistence->branchTaken;
+    0 >> pcPersistence->branchTarget;
+    0 >> pcPersistence->flowEnable;
 
     hzunit->setConfiguration(
         RipesSettings::value(
@@ -96,7 +117,9 @@ public:
     // Note: pc_src works uses the PcSrc enum, but is selected by the boolean
     // signal from the controlflow OR gate. PcSrc enum values must adhere to the
     // boolean 0/1 values.
-    controlflow_or->out >> pc_src->select;
+    controlflow_or->out >> *pc_select_or->in[0];
+    pcPersistence->pendingValid >> *pc_select_or->in[1];
+    pc_select_or->out >> pc_src->select;
 
     controlflow_or->out >> *efsc_or->in[0];
     ecallChecker->syscallExit >> *efsc_or->in[1];
@@ -162,7 +185,10 @@ public:
     idex_reg->do_jmp_out >> *controlflow_or->in[1];
 
     pc_4->out >> pc_src->get(PcSrc::PC4);
-    alu->res >> pc_src->get(PcSrc::ALU);
+    alu->res >> pending_pc_src->get(0);
+    pcPersistence->pendingPC >> pending_pc_src->get(1);
+    pcPersistence->pendingValid >> pending_pc_src->select;
+    pending_pc_src->out >> pc_src->get(PcSrc::ALU);
 
     // -----------------------------------------------------------------------
     // ALU
@@ -198,26 +224,18 @@ public:
     // -----------------------------------------------------------------------
     // FALU
 
-    idex_reg->f_r1_out >> freg1_fw_src->get(ForwardingSrc::IdStage);
-    exmem_reg->falures_out >> freg1_fw_src->get(ForwardingSrc::MemStage);
-    reg_wr_src->out >> freg1_fw_src->get(ForwardingSrc::WbStage);
+    idex_reg->f_r1_out >> freg1_fw_src->get(FPForwardingSrc::IdStage);
+    reg_wr_src->out >> freg1_fw_src->get(FPForwardingSrc::WbStage);
     funit->falu_reg1_forwarding_ctrl >> freg1_fw_src->select;
 
-    idex_reg->f_r2_out >> freg2_fw_src->get(ForwardingSrc::IdStage);
-    exmem_reg->falures_out >> freg2_fw_src->get(ForwardingSrc::MemStage);
-    reg_wr_src->out >> freg2_fw_src->get(ForwardingSrc::WbStage);
+    idex_reg->f_r2_out >> freg2_fw_src->get(FPForwardingSrc::IdStage);
+    reg_wr_src->out >> freg2_fw_src->get(FPForwardingSrc::WbStage);
     funit->falu_reg2_forwarding_ctrl >> freg2_fw_src->select;
 
     freg1_fw_src->out >> falu->op1;
     freg2_fw_src->out >> falu->op2;
     0 >> falu->op3;
     idex_reg->falu_ctrl_out >> falu->ctrl;
-    idex_reg->opcode_out >> falu_latency->opcode;
-    idex_reg->valid_out >> falu_latency->valid;
-    falu_latency_remaining_reg->out >> falu_latency->remaining;
-    falu_latency->next_remaining >> falu_latency_remaining_reg->in;
-    1 >> falu_latency_remaining_reg->enable;
-    efschz_or->out >> falu_latency_remaining_reg->clear;
 
     // -----------------------------------------------------------------------
     // Data memory
@@ -284,6 +302,7 @@ public:
     control->fp_reg_do_write_ctrl >> idex_reg->fp_reg_do_write_in;
     control->data_mem_wr_src_ctrl >> idex_reg->data_mem_wr_src_ctrl_in;
     control->falu_ctrl >> idex_reg->falu_ctrl_in;
+    hzunit->emissionCycle >> idex_reg->emissionCycle_in;
 
     ifid_reg->valid_out >> idex_reg->valid_in;
 
@@ -302,6 +321,8 @@ public:
     alu->res >> exmem_reg->alures_in;
     freg2_fw_src->out >> exmem_reg->f_r2_in;
     falu->res >> exmem_reg->falures_in;
+    falu->res >> idex_reg->falu_result_in;
+    0 >> idex_reg->badPrediction;
 
     // Control
     idex_reg->reg_wr_src_ctrl_out >> exmem_reg->reg_wr_src_ctrl_in;
@@ -313,6 +334,7 @@ public:
     idex_reg->fp_reg_do_write_out >> exmem_reg->fp_reg_do_write_in;
     idex_reg->data_mem_wr_src_ctrl_out >>
         exmem_reg->data_mem_wr_src_ctrl_in;
+    idex_reg->emissionCycle_out >> exmem_reg->emissionCycle_in;
 
     idex_reg->valid_out >> exmem_reg->valid_in;
 
@@ -333,6 +355,7 @@ public:
     exmem_reg->wr_reg_idx_out >> memwb_reg->wr_reg_idx_in;
     exmem_reg->reg_do_write_out >> memwb_reg->reg_do_write_in;
     exmem_reg->fp_reg_do_write_out >> memwb_reg->fp_reg_do_write_in;
+    exmem_reg->mem_op_out >> memwb_reg->mem_op_in;
 
     exmem_reg->valid_out >> memwb_reg->valid_in;
 
@@ -346,16 +369,17 @@ public:
 
     memwb_reg->wr_reg_idx_out >> funit->wb_reg_wr_idx;
     memwb_reg->reg_do_write_out >> funit->wb_reg_wr_en;
-
-    exmem_reg->fp_reg_do_write_out >> funit->mem_fp_reg_wr_en;
-
-    memwb_reg->fp_reg_do_write_out >> funit->wb_fp_reg_wr_en;
+    memwb_reg->mem_op_out >> funit->wb_mem_op;
 
     // -----------------------------------------------------------------------
     // Hazard detection unit
     decode->r1_reg_idx >> hzunit->id_reg1_idx;
     decode->r2_reg_idx >> hzunit->id_reg2_idx;
+    decode->wr_reg_idx >> hzunit->id_reg_wr_idx;
+    ifid_reg->pc_out >> hazard_pc_adapter->in;
+    hazard_pc_adapter->out >> hzunit->id_pc;
     decode->opcode >> hzunit->id_opcode;
+    ifid_reg->valid_out >> hzunit->id_valid;
 
     idex_reg->mem_do_read_out >> hzunit->ex_do_mem_read_en;
     idex_reg->wr_reg_idx_out >> hzunit->ex_reg_wr_idx;
@@ -363,11 +387,13 @@ public:
     idex_reg->fp_reg_do_write_out >> hzunit->ex_do_fp_write_en;
 
     exmem_reg->reg_do_write_out >> hzunit->mem_do_reg_write;
+    exmem_reg->fp_reg_do_write_out >> hzunit->mem_do_fp_write;
 
     memwb_reg->reg_do_write_out >> hzunit->wb_do_reg_write;
+    memwb_reg->fp_reg_do_write_out >> hzunit->wb_do_fp_write;
 
     idex_reg->opcode_out >> hzunit->opcode;
-    falu_latency->stall >> hzunit->falu_stall;
+    0 >> hzunit->branchTakenFromMEM;
   }
 
   // Design subcomponents
@@ -375,7 +401,6 @@ public:
   SUBCOMPONENT(fRegisterFile, TYPE(FRegisterFile<XLEN, true>));
   SUBCOMPONENT(alu, TYPE(ALU<XLEN>));
   SUBCOMPONENT(falu, TYPE(FALU<XLEN>));
-  SUBCOMPONENT(falu_latency, FALULatency);
   SUBCOMPONENT(control, Control);
   SUBCOMPONENT(immediate, TYPE(Immediate<XLEN>));
   SUBCOMPONENT(decode, TYPE(Decode<XLEN>));
@@ -385,7 +410,6 @@ public:
 
   // Registers
   SUBCOMPONENT(pc_reg, RegisterClEn<XLEN>);
-  SUBCOMPONENT(falu_latency_remaining_reg, RegisterClEn<8>);
 
   // Stage seperating registers
   SUBCOMPONENT(ifid_reg, TYPE(IFID<XLEN>));
@@ -397,12 +421,14 @@ public:
   SUBCOMPONENT(reg_wr_src, TYPE(EnumMultiplexer<UnifiedRegWrSrc, XLEN>));
   SUBCOMPONENT(reg_wr_src_adapter, UnifiedRegWrSrcAdapter);
   SUBCOMPONENT(pc_src, TYPE(EnumMultiplexer<PcSrc, XLEN>));
+  SUBCOMPONENT(pending_pc_src, TYPE(Multiplexer<2, XLEN>));
+  SUBCOMPONENT(pcPersistence, TYPE(RV5S3SDBPCPersistence<XLEN>));
   SUBCOMPONENT(alu_op1_src, TYPE(EnumMultiplexer<AluSrc1, XLEN>));
   SUBCOMPONENT(alu_op2_src, TYPE(EnumMultiplexer<AluSrc2, XLEN>));
   SUBCOMPONENT(reg1_fw_src, TYPE(EnumMultiplexer<ForwardingSrc, XLEN>));
   SUBCOMPONENT(reg2_fw_src, TYPE(EnumMultiplexer<ForwardingSrc, XLEN>));
-  SUBCOMPONENT(freg1_fw_src, TYPE(EnumMultiplexer<ForwardingSrc, XLEN>));
-  SUBCOMPONENT(freg2_fw_src, TYPE(EnumMultiplexer<ForwardingSrc, XLEN>));
+  SUBCOMPONENT(freg1_fw_src, TYPE(EnumMultiplexer<FPForwardingSrc, XLEN>));
+  SUBCOMPONENT(freg2_fw_src, TYPE(EnumMultiplexer<FPForwardingSrc, XLEN>));
   SUBCOMPONENT(data_mem_wr_src, TYPE(EnumMultiplexer<DataMemWrSrc, XLEN>));
   SUBCOMPONENT(pc_inc, TYPE(EnumMultiplexer<PcInc, XLEN>));
 
@@ -413,12 +439,14 @@ public:
   // Forwarding & hazard detection units
   SUBCOMPONENT(funit, ForwardingUnit);
   SUBCOMPONENT(hzunit, HazardUnit);
+  SUBCOMPONENT(hazard_pc_adapter, TYPE(RV5SAddressAdapter<XLEN>));
 
   // Gates
   // True if branch instruction and branch taken
   SUBCOMPONENT(br_and, TYPE(And<1, 2>));
   // True if branch taken or jump instruction
   SUBCOMPONENT(controlflow_or, TYPE(Or<1, 2>));
+  SUBCOMPONENT(pc_select_or, TYPE(Or<1, 2>));
   // True if controlflow action or performing syscall finishing
   SUBCOMPONENT(efsc_or, TYPE(Or<1, 2>));
   // True if above or stalling due to load-use hazard
@@ -516,7 +544,7 @@ public:
       break;
     }
     case MEM: {
-      if (exmem_reg->stalled_out.uValue() == 1) {
+      if (!stageValid && exmem_reg->stalled_out.uValue() == 1) {
         state = StageInfo::State::Stalled;
       } else if (m_cycleCount > MEM && exmem_reg->valid_out.uValue() == 0) {
         state = StageInfo::State::Flushed;
@@ -524,7 +552,7 @@ public:
       break;
     }
     case WB: {
-      if (memwb_reg->stalled_out.uValue() == 1) {
+      if (!stageValid && memwb_reg->stalled_out.uValue() == 1) {
         state = StageInfo::State::Stalled;
       } else if (m_cycleCount > WB && memwb_reg->valid_out.uValue() == 0) {
         state = StageInfo::State::Flushed;
@@ -537,34 +565,75 @@ public:
   }
 
   std::vector<FPUnicicleStageInfo> fpUnicicleStageInfos() const override {
-    if (!idex_reg->valid_out.uValue()) {
-      return {};
+    std::vector<FPUnicicleStageInfo> stages;
+    const uint64_t currentCycle = hzunit->currentCycle();
+    for (const auto &unit : hzunit->functionalUnits()) {
+      unsigned unitIndex = 0;
+      switch (unit.type) {
+      case HazardUnit::FUType::Integer:
+        unitIndex = 0;
+        break;
+      case HazardUnit::FUType::FPAddSub:
+        unitIndex = 1;
+        break;
+      case HazardUnit::FUType::FPMul:
+        unitIndex = 2;
+        break;
+      case HazardUnit::FUType::FPDiv:
+        unitIndex = 3;
+        break;
+      }
+
+      for (std::size_t stageIndex = 0; stageIndex < unit.stages.size();
+           ++stageIndex) {
+        const auto &instruction = unit.stages[stageIndex];
+        if (!instruction.valid) {
+          continue;
+        }
+
+        unsigned visibleStage = static_cast<unsigned>(stageIndex);
+        if (!unit.pipelined) {
+          const uint64_t elapsed =
+              currentCycle > instruction.inputCycle
+                  ? currentCycle - instruction.inputCycle
+                  : 0;
+          visibleStage = static_cast<unsigned>(
+              std::min<uint64_t>(elapsed, unit.latency - 1));
+        }
+        stages.push_back(
+            {true, instruction.pc, unitIndex, visibleStage, unit.instance});
+      }
     }
-    const auto opcode = idex_reg->opcode_out.eValue<RVInstr>();
-    unsigned unit = Control::isFALUInstr(opcode) ? 1u : 0u;
-    switch (opcode) {
-    case RVInstr::FADD:
-    case RVInstr::FSUB:
-    case RVInstr::FADDD:
-    case RVInstr::FSUBD:
-      unit = 1;
-      break;
-    case RVInstr::FMUL:
-    case RVInstr::FMULD:
-      unit = 2;
-      break;
-    case RVInstr::FDIV:
-    case RVInstr::FDIVD:
-    case RVInstr::FSQRT:
-    case RVInstr::FSQRTD:
-      unit = 3;
-      break;
-    default:
-      break;
+    return stages;
+  }
+
+  AdvancedExecutionStatistics advancedExecutionStatistics() const override {
+    auto statistics = m_advancedStatistics;
+    statistics.available = true;
+    statistics.integerUnitCount = 0;
+    statistics.fpAddSubUnitCount = 0;
+    statistics.fpMultiplyUnitCount = 0;
+    statistics.fpDivideUnitCount = 0;
+    for (const auto &unit : hzunit->functionalUnits()) {
+      switch (unit.type) {
+      case HazardUnit::FUType::Integer:
+        ++statistics.integerUnitCount;
+        break;
+      case HazardUnit::FUType::FPAddSub:
+        ++statistics.fpAddSubUnitCount;
+        statistics.fpAddSubLatency = unit.latency;
+        break;
+      case HazardUnit::FUType::FPMul:
+        ++statistics.fpMultiplyUnitCount;
+        statistics.fpMultiplyLatency = unit.latency;
+        break;
+      case HazardUnit::FUType::FPDiv:
+        ++statistics.fpDivideUnitCount;
+        statistics.fpDivideLatency = unit.latency;
+        break;
+      }
     }
-    const unsigned cycle = falu_latency->current_cycle.uValue();
-    return {{true, idex_reg->pc_out.uValue(), unit,
-             cycle == 0 ? 0u : cycle - 1}};
+    return statistics;
   }
 
   void setProgramCounter(AInt address) override {
@@ -613,7 +682,11 @@ public:
       if (!allStagesInvalid)
         break;
     }
-    return allStagesInvalid;
+    if (!allStagesInvalid)
+      return false;
+
+    return !hzunit->hasPendingInstructions() &&
+           !exmem_reg->hasPendingInstructions();
   }
 
   void setRegister(const std::string_view &regFile, unsigned i, VInt v) override {
@@ -625,6 +698,8 @@ public:
   }
 
   void clockProcessor() override {
+    saveAdvancedStatistics();
+
     // An instruction has been retired if the instruction in the WB stage is
     // valid and the PC is within the executable range of the program
     if (memwb_reg->valid_out.uValue() != 0 &&
@@ -643,6 +718,10 @@ public:
       m_syscallExitCycle = -1;
     }
     Design::reverse();
+    if (!m_advancedStatisticsHistory.empty()) {
+      m_advancedStatistics = m_advancedStatisticsHistory.front();
+      m_advancedStatisticsHistory.pop_front();
+    }
     if (memwb_reg->valid_out.uValue() != 0 &&
         isExecutableAddress(memwb_reg->pc_out.uValue())) {
       m_instructionsRetired--;
@@ -653,6 +732,8 @@ public:
     ecallChecker->setSysCallExiting(false);
     Design::reset();
     m_syscallExitCycle = -1;
+    m_advancedStatistics = {};
+    m_advancedStatisticsHistory.clear();
   }
 
   static ProcessorISAInfo supportsISA() { return RVISA::supportsISA<XLEN>(); }
@@ -674,27 +755,96 @@ public:
   }
 
 private:
-  QString fpEXStageName() const {
-    const unsigned cycle = falu_latency->current_cycle.uValue();
-    if (cycle == 0) {
-      return "";
+  void saveAdvancedStatistics() {
+    m_advancedStatisticsHistory.push_front(m_advancedStatistics);
+
+    if (stageInfo({0, IF}).stage_valid && hzunit->hazardFEEnable.uValue())
+      ++m_advancedStatistics.instructionMemoryCycles;
+
+    if (exmem_reg->valid_out.uValue() &&
+        (exmem_reg->mem_do_read_out.uValue() ||
+         exmem_reg->mem_do_write_out.uValue())) {
+      ++m_advancedStatistics.dataMemoryCycles;
     }
 
-    switch (idex_reg->opcode_out.eValue<RVInstr>()) {
-    case RVInstr::FADD:
-    case RVInstr::FSUB:
-    case RVInstr::FADDD:
-    case RVInstr::FSUBD:
-      return "A" + QString::number(cycle);
-    case RVInstr::FMUL:
-    case RVInstr::FMULD:
-      return "M" + QString::number(cycle);
-    case RVInstr::FDIV:
-    case RVInstr::FDIVD:
-      return "D" + QString::number(cycle);
-    default:
+    bool anyUnitBusy = false;
+    for (const auto &unit : hzunit->functionalUnits()) {
+      const bool busy = std::any_of(
+          unit.stages.begin(), unit.stages.end(),
+          [](const HazardUnit::InstructionInfo &instruction) {
+            return instruction.valid;
+          });
+      if (!busy)
+        continue;
+
+      anyUnitBusy = true;
+      switch (unit.type) {
+      case HazardUnit::FUType::Integer:
+        ++m_advancedStatistics.integerUnitCycles;
+        break;
+      case HazardUnit::FUType::FPAddSub:
+        ++m_advancedStatistics.fpAddSubUnitCycles;
+        if (unit.instance <
+            m_advancedStatistics.fpAddSubUnitCyclesByInstance.size()) {
+          ++m_advancedStatistics
+                .fpAddSubUnitCyclesByInstance[unit.instance];
+        }
+        break;
+      case HazardUnit::FUType::FPMul:
+        ++m_advancedStatistics.fpMultiplyUnitCycles;
+        if (unit.instance <
+            m_advancedStatistics.fpMultiplyUnitCyclesByInstance.size()) {
+          ++m_advancedStatistics
+                .fpMultiplyUnitCyclesByInstance[unit.instance];
+        }
+        break;
+      case HazardUnit::FUType::FPDiv:
+        ++m_advancedStatistics.fpDivideUnitCycles;
+        if (unit.instance <
+            m_advancedStatistics.fpDivideUnitCyclesByInstance.size()) {
+          ++m_advancedStatistics
+                .fpDivideUnitCyclesByInstance[unit.instance];
+        }
+        break;
+      }
+    }
+    if (anyUnitBusy)
+      ++m_advancedStatistics.aluCycles;
+
+    const bool dataHazard = hzunit->dataHazardActive();
+    const bool structuralHazard =
+        !dataHazard && hzunit->structuralHazardActive();
+    if (dataHazard)
+      ++m_advancedStatistics.dataHazardStallCycles;
+    if (structuralHazard)
+      ++m_advancedStatistics.structuralHazardStallCycles;
+    if (dataHazard || structuralHazard)
+      ++m_advancedStatistics.stallCycles;
+
+    if (br_and->out.uValue()) {
+      if (isExecutableAddress(pc_reg->out.uValue()))
+        ++m_advancedStatistics.controlHazardDiscardedInstructions;
+      if (ifid_reg->valid_out.uValue() &&
+          isExecutableAddress(ifid_reg->pc_out.uValue())) {
+        ++m_advancedStatistics.controlHazardDiscardedInstructions;
+      }
+    }
+
+  }
+
+  QString fpEXStageName() const {
+    switch (HazardUnitState::unitTypeFor(
+        idex_reg->opcode_out.eValue<RVInstr>())) {
+    case HazardUnitState::FUType::FPAddSub:
+      return "A1";
+    case HazardUnitState::FUType::FPMul:
+      return "M1";
+    case HazardUnitState::FUType::FPDiv:
+      return "D1";
+    case HazardUnitState::FUType::Integer:
       return "";
     }
+    return "";
   }
 
   /**
@@ -704,6 +854,8 @@ private:
    * during rewinding.
    */
   long long m_syscallExitCycle = -1;
+  AdvancedExecutionStatistics m_advancedStatistics;
+  std::deque<AdvancedExecutionStatistics> m_advancedStatisticsHistory;
   std::shared_ptr<ISAInfoBase> m_enabledISA;
   ProcessorStructure m_structure = {{0, 5}};
 };

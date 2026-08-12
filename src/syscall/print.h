@@ -5,6 +5,9 @@
 #include "processorhandler.h"
 #include "ripes_syscall.h"
 #include "systemio.h"
+#include <cstdint>
+#include <cstring>
+#include <type_traits>
 
 namespace Ripes {
 
@@ -36,6 +39,29 @@ public:
     const VInt arg0 = BaseSyscall::getArg(BaseSyscall::REG_FILE, 0);
     auto *v_f = reinterpret_cast<const float *>(&arg0);
     SystemIO::printString(QString::number(static_cast<double>(*v_f)));
+  }
+};
+
+template <typename BaseSyscall>
+class PrintDoubleSyscall : public BaseSyscall {
+  static_assert(std::is_base_of<Syscall, BaseSyscall>::value);
+
+public:
+  PrintDoubleSyscall()
+      : BaseSyscall("PrintDouble", "Prints a double-precision number",
+                    {{0, "double to print"}}) {}
+
+  void execute() {
+    const VInt arg0 =
+        BaseSyscall::getArg(BaseSyscall::REG_FILE, 0);
+
+    const std::uint64_t bits = static_cast<std::uint64_t>(arg0);
+    double value;
+
+    static_assert(sizeof(value) == sizeof(bits));
+    std::memcpy(&value, &bits, sizeof(value));
+
+    SystemIO::printString(QString::number(value, 'g', 15));
   }
 };
 

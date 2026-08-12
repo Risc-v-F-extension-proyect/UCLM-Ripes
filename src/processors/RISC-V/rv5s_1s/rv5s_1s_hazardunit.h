@@ -1,6 +1,7 @@
 #pragma once
 
 #include "processors/RISC-V/riscv.h"
+#include "../rv5s/rv5s_hazardunit.h"
 
 #include "VSRTL/core/vsrtl_component.h"
 
@@ -12,27 +13,100 @@ class HazardUnit_1S : public Component {
 public:
   HazardUnit_1S(const std::string &name, SimComponent *parent)
       : Component(name, parent) {
-    // tried doing this leveraging inheritance but couldn't assign these
-    // outputs to the child class' functions. pls help no hablo c++
-    hazardFEEnable << [this] { return !hasHazard(); };
-    hazardIDEXEnable << [this] { return !hasEcallHazard(); };
-    hazardEXMEMClear << [this] { return hasEcallHazard(); };
+    id_reg1_idx >> fpHazard->id_reg1_idx;
+    id_reg2_idx >> fpHazard->id_reg2_idx;
+    id_reg_wr_idx >> fpHazard->id_reg_wr_idx;
+    id_valid >> fpHazard->id_valid;
+    id_pc >> fpHazard->id_pc;
+    ex_reg_wr_idx >> fpHazard->ex_reg_wr_idx;
+    ex_do_mem_read_en >> fpHazard->ex_do_mem_read_en;
+    ex_do_reg_write_en >> fpHazard->ex_do_reg_write_en;
+    ex_do_fp_write_en >> fpHazard->ex_do_fp_write_en;
+    mem_do_reg_write >> fpHazard->mem_do_reg_write;
+    wb_do_reg_write >> fpHazard->wb_do_reg_write;
+    mem_do_fp_write >> fpHazard->mem_do_fp_write;
+    wb_do_fp_write >> fpHazard->wb_do_fp_write;
+    opcode >> fpHazard->opcode;
+    id_opcode >> fpHazard->id_opcode;
+    branchTakenFromMEM >> fpHazard->branchTakenFromMEM;
+
+    hazardFEEnable << [this] {
+      return !hasHazard() &&
+             (!fpEnabled || fpHazard->hazardFEEnable.uValue());
+    };
+    hazardIDEXEnable << [this] {
+      return !hasEcallHazard() &&
+             (!fpEnabled || fpHazard->hazardIDEXEnable.uValue());
+    };
+    hazardEXMEMClear << [this] {
+      return hasEcallHazard() ||
+             (fpEnabled && fpHazard->hazardEXMEMClear.uValue());
+    };
     hazardIDEXClear << // MODIFIED
-        [this] { return hasLoadUseHazard() || branchHasDataHazard(); };
-    stallEcallHandling << [this] { return hasEcallHazard(); };
+        [this] {
+          return hasLoadUseHazard() || branchHasDataHazard() ||
+                 (fpEnabled && fpHazard->hazardIDEXClear.uValue());
+        };
+    stallEcallHandling << [this] {
+      return hasEcallHazard() ||
+             (fpEnabled && fpHazard->stallEcallHandling.uValue());
+    };
+    emissionCycle << [this] {
+      return fpEnabled ? fpHazard->emissionCycle.uValue() : VSRTL_VT_U(0);
+    };
+  }
+
+  void setFPExtensionEnabled(bool enabled) {
+    fpEnabled = enabled;
+    fpHazard->setFPExtensionEnabled(enabled);
+  }
+
+  void setConfiguration(unsigned addLatency, unsigned multiplyLatency,
+                        unsigned divideLatency, unsigned addCount,
+                        unsigned multiplyCount, unsigned divideCount,
+                        bool addPipelined, bool multiplyPipelined,
+                        bool dividePipelined) {
+    fpHazard->setConfiguration(addLatency, multiplyLatency, divideLatency,
+                               addCount, multiplyCount, divideCount,
+                               addPipelined, multiplyPipelined,
+                               dividePipelined);
+  }
+
+  const std::vector<HazardUnit::FunctionalUnit> &functionalUnits() const {
+    return fpHazard->functionalUnits();
+  }
+  bool hasPendingInstructions() const {
+    return fpEnabled && fpHazard->hasPendingInstructions();
+  }
+  uint64_t currentCycle() const { return fpHazard->currentCycle(); }
+  bool dataHazardActive() const {
+    return hasLoadUseHazard() || branchHasDataHazard() ||
+           (fpEnabled && fpHazard->dataHazardActive());
+  }
+  bool structuralHazardActive() const {
+    return fpEnabled && fpHazard->structuralHazardActive();
   }
 
   INPUTPORT(id_reg1_idx, c_RVRegsBits);
   INPUTPORT(id_reg2_idx, c_RVRegsBits);
+  INPUTPORT(id_reg_wr_idx, c_RVRegsBits);
+  INPUTPORT(id_valid, 1);
+  INPUTPORT(id_pc, 64);
 
   INPUTPORT(ex_reg_wr_idx, c_RVRegsBits);
   INPUTPORT(ex_do_mem_read_en, 1);
+  INPUTPORT(ex_do_reg_write_en, 1);
+  INPUTPORT(ex_do_fp_write_en, 1);
 
   INPUTPORT(mem_do_reg_write, 1);
+  INPUTPORT(mem_do_fp_write, 1);
 
   INPUTPORT(wb_do_reg_write, 1);
+  INPUTPORT(wb_do_fp_write, 1);
 
   INPUTPORT_ENUM(opcode, RVInstr);
+  INPUTPORT_ENUM(id_opcode, RVInstr);
+  INPUTPORT(branchTakenFromMEM, 1);
 
   // Hazard Front End enable: Low when stalling the front end (shall be
   // connected to a register 'enable' input port). The
@@ -50,6 +124,7 @@ public:
   // have outstanding writes in the pipeline which must be comitted to the
   // register file before handling the ecall.
   OUTPUTPORT(stallEcallHandling, 1);
+  OUTPUTPORT(emissionCycle, 64);
 
   // MODIFIED: enable checking ID stage for branch instructions
   INPUTPORT(id_do_branch, 1);
@@ -63,6 +138,8 @@ public:
   INPUTPORT(mem_do_mem_read_en, 1);
 
 private:
+  SUBCOMPONENT(fpHazard, HazardUnit);
+  bool fpEnabled = false;
   bool hasHazard() { return hasLoadUseHazard() || hasEcallHazard() || branchHasDataHazard(); }
 
   // MODIFIED for load/use hazard detection of branch operands
