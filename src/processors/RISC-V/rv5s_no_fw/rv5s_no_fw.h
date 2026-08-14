@@ -45,9 +45,15 @@ public:
   RV5S_NO_FW(const QStringList &extensions)
       : RipesVSRTLProcessor(
             "5-Stage RISC-V Processor without forwarding unit") {
-    m_enabledISA = ISAInfoRegistry::getISA<XLenToRVISA<XLEN>()>(extensions);
+    QStringList classicExtensions = extensions;
+    classicExtensions.removeAll("F");
+    classicExtensions.removeAll("D");
+    m_enabledISA =
+        ISAInfoRegistry::getISA<XLenToRVISA<XLEN>()>(classicExtensions);
     decode->setISA(m_enabledISA);
     uncompress->setISA(m_enabledISA);
+    0 >> exmem_reg->do_branch_in;
+    0 >> exmem_reg->control_flow_in;
 
     // -----------------------------------------------------------------------
     // Program counter
@@ -219,6 +225,7 @@ public:
     0 >> exmem_reg->falures_in;
     0 >> exmem_reg->fp_reg_do_write_in;
     0 >> exmem_reg->data_mem_wr_src_ctrl_in;
+    0 >> exmem_reg->emissionCycle_in;
 
     // -----------------------------------------------------------------------
     // MEM/WB
@@ -235,6 +242,7 @@ public:
     exmem_reg->reg_wr_src_ctrl_out >> memwb_reg->reg_wr_src_ctrl_in;
     exmem_reg->wr_reg_idx_out >> memwb_reg->wr_reg_idx_in;
     exmem_reg->reg_do_write_out >> memwb_reg->reg_do_write_in;
+    exmem_reg->mem_op_out >> memwb_reg->mem_op_in;
 
     exmem_reg->valid_out >> memwb_reg->valid_in;
     0 >> memwb_reg->falures_in;
@@ -491,7 +499,14 @@ public:
     m_syscallExitCycle = -1;
   }
 
-  static ProcessorISAInfo supportsISA() { return RVISA::supportsISA<XLEN>(); }
+  static ProcessorISAInfo supportsISA() {
+    auto isaInfo = RVISA::supportsISA<XLEN>();
+    isaInfo.supportedExtensions.removeAll("F");
+    isaInfo.supportedExtensions.removeAll("D");
+    isaInfo.defaultExtensions.removeAll("F");
+    isaInfo.defaultExtensions.removeAll("D");
+    return isaInfo;
+  }
   std::shared_ptr<ISAInfoBase> implementsISA() const override {
     return m_enabledISA;
   }

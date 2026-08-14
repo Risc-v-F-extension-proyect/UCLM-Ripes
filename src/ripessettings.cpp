@@ -92,7 +92,7 @@ const std::map<QString, QVariant> s_defaultSettings = {
 
 void SettingObserver::setValue(const QVariant &v) {
   QSettings settings;
-  Q_ASSERT(settings.contains(m_key));
+  Q_ASSERT(s_defaultSettings.count(m_key) != 0);
   settings.setValue(m_key, v);
 
   emit modified(value());

@@ -51,10 +51,24 @@ public:
   enum Stage { IF, ID, II, EX, MEM, WB, STAGECOUNT };
   RV6S_DUAL(const QStringList &extensions)
       : RipesVSRTLProcessor("6-Stage dual-issue RISC-V Processor") {
-    m_enabledISA = ISAInfoRegistry::getISA<XLenToRVISA<XLEN>()>(extensions);
+    // The dual-issue processor retains its original integer-only datapath.
+    // Filter FP extensions defensively in case they arrive from persisted
+    // settings or an external configuration script.
+    QStringList integerExtensions = extensions;
+    integerExtensions.removeAll("F");
+    integerExtensions.removeAll("D");
+    m_enabledISA =
+        ISAInfoRegistry::getISA<XLenToRVISA<XLEN>()>(integerExtensions);
     decode_way2->setISA(m_enabledISA);
     decode_way1->setISA(m_enabledISA);
     uncompress_dual->setISA(m_enabledISA);
+    0 >> exmem_reg->do_branch_in;
+    0 >> exmem_reg->control_flow_in;
+    0 >> exmem_reg->emissionCycle_in;
+    0 >> iiex_reg->badPrediction;
+    0 >> iiex_reg->emissionCycle_in;
+    0 >> iiex_reg->falu_result_in;
+    0 >> memwb_reg->mem_op_in;
 
     // -----------------------------------------------------------------------
     // Program counter
@@ -890,7 +904,14 @@ public:
     m_syscallExitCycle = -1;
   }
 
-  static ProcessorISAInfo supportsISA() { return RVISA::supportsISA<XLEN>(); }
+  static ProcessorISAInfo supportsISA() {
+    auto isaInfo = RVISA::supportsISA<XLEN>();
+    isaInfo.supportedExtensions.removeAll("F");
+    isaInfo.supportedExtensions.removeAll("D");
+    isaInfo.defaultExtensions.removeAll("F");
+    isaInfo.defaultExtensions.removeAll("D");
+    return isaInfo;
+  }
   std::shared_ptr<ISAInfoBase> implementsISA() const override {
     return m_enabledISA;
   }

@@ -36,9 +36,12 @@ void HighlightableTextEdit::paintEvent(QPaintEvent *event) {
     painter.setFont(font());
     const QRect stageStringRect =
         painter.fontMetrics().boundingRect(stageString);
+    constexpr qreal stageRightMargin = 29.0;
+    constexpr qreal stageVerticalOffset = 3.0;
     QPointF drawAt = QPointF(
-        bbr.width() - stageStringRect.width() - /* right-hand side padding*/ 10,
-        bbr.top() + (bbr.height() / 2.0 - stageStringRect.height() / 2.0));
+        bbr.width() - stageStringRect.width() - stageRightMargin,
+        bbr.top() + (bbr.height() / 2.0 - stageStringRect.height() / 2.0) +
+            stageVerticalOffset);
     painter.drawText(QRectF(drawAt.x(), drawAt.y(), stageStringRect.width(),
                             stageStringRect.height()),
                      stageString);

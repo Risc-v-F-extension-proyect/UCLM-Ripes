@@ -266,5 +266,5 @@ void tst_RISCV::runTests(const ProcessorID &id, const QStringList &extensions,
   }
 }
 
-QTEST_APPLESS_MAIN(tst_RISCV)
+QTEST_GUILESS_MAIN(tst_RISCV)
 #include "tst_riscv.moc"

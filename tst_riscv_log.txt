@@ -1,0 +1,8 @@
+********* Start testing of tst_RISCV *********
+Config: Using QtTest library 6.11.1, Qt 6.11.1 (x86_64-little_endian-llp64 shared (dynamic) debug build; by MSVC 2022), windows 11
+PASS   : tst_RISCV::initTestCase()
+QFATAL : tst_RISCV::testRV64_SingleCycle() ASSERT: "settings.contains(m_key)" in file C:\dev\UCLM-Ripes-backport\src\ripessettings.h, line 95
+FAIL!  : tst_RISCV::testRV64_SingleCycle() Received a fatal error.
+C:\dev\UCLM-Ripes-backport\src\ripessettings.h(95) : failure location
+Totals: 1 passed, 1 failed, 0 skipped, 0 blacklisted, 18ms
+********* Finished testing of tst_RISCV *********

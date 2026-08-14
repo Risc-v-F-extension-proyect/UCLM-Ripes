@@ -92,8 +92,9 @@ public:
   template <typename T = QVariant>
   T value() const {
     QSettings settings;
-    Q_ASSERT(settings.contains(m_key));
-    return settings.value(m_key).value<T>();
+    const auto defaultSetting = s_defaultSettings.find(m_key);
+    Q_ASSERT(defaultSetting != s_defaultSettings.end());
+    return settings.value(m_key, defaultSetting->second).value<T>();
   }
 
 signals:

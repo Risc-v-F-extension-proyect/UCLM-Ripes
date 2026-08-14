@@ -354,33 +354,43 @@ void ProcessorSelectionDialog::setupFALULatencyOptions() {
 
   auto addUnitRow = [grid](int row, const QString &name,
                            QSpinBox *&latency, const QString &latencySetting,
+                           unsigned maximumLatency,
                            QSpinBox *&count, const QString &countSetting,
                            QCheckBox *&segmented,
                            const QString &segmentedSetting) {
     grid->addWidget(new QLabel(name), row, 0);
     latency = new QSpinBox;
-    latency->setRange(1, 255);
+    latency->setRange(1, maximumLatency);
     latency->setValue(RipesSettings::value(latencySetting).toUInt());
     grid->addWidget(latency, row, 1);
     count = new QSpinBox;
-    count->setRange(1, 32);
+    count->setRange(1, 3);
     count->setValue(RipesSettings::value(countSetting).toUInt());
     grid->addWidget(count, row, 2);
     segmented = new QCheckBox;
     segmented->setChecked(RipesSettings::value(segmentedSetting).toBool());
     grid->addWidget(segmented, row, 3);
+
+    const auto updateCountAvailability = [count](bool isSegmented) {
+      if (isSegmented)
+        count->setValue(1);
+      count->setEnabled(!isSegmented);
+    };
+    QObject::connect(segmented, &QCheckBox::toggled,
+                     updateCountAvailability);
+    updateCountAvailability(segmented->isChecked());
   };
 
   addUnitRow(1, "add/sub", m_faluAddSubLatency,
-             RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY, m_faluAddSubCount,
+             RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY, 4, m_faluAddSubCount,
              RIPES_SETTING_RV5S_FALU_ADDSUB_COUNT, m_faluAddSubPipelined,
              RIPES_SETTING_RV5S_FALU_ADDSUB_PIPELINED);
   addUnitRow(2, "mul", m_faluMulLatency,
-             RIPES_SETTING_RV5S_FALU_MUL_LATENCY, m_faluMulCount,
+             RIPES_SETTING_RV5S_FALU_MUL_LATENCY, 7, m_faluMulCount,
              RIPES_SETTING_RV5S_FALU_MUL_COUNT, m_faluMulPipelined,
              RIPES_SETTING_RV5S_FALU_MUL_PIPELINED);
   addUnitRow(3, "div", m_faluDivLatency,
-             RIPES_SETTING_RV5S_FALU_DIV_LATENCY, m_faluDivCount,
+             RIPES_SETTING_RV5S_FALU_DIV_LATENCY, 25, m_faluDivCount,
              RIPES_SETTING_RV5S_FALU_DIV_COUNT, m_faluDivPipelined,
              RIPES_SETTING_RV5S_FALU_DIV_PIPELINED);
 

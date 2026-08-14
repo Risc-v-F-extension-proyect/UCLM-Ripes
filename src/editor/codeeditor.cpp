@@ -12,6 +12,7 @@
 #include <QToolTip>
 #include <QWheelEvent>
 
+#include <algorithm>
 #include <iterator>
 
 #include "colors.h"
@@ -448,11 +449,23 @@ void CodeEditor::updateHighlighting() {
   // the source line which originated the instruction.
   const unsigned stages = proc->structure().numStages();
   auto colorGenerator = Colors::incrementalRedGenerator(stages);
+  const auto executionStages = proc->fpUnicicleStageInfos();
 
   for (auto sid : proc->structure().stageIt()) {
     const auto stageInfo = proc->stageInfo(sid);
     QColor stageColor = colorGenerator();
     if (stageInfo.stage_valid) {
+      if (!stageInfo.namedState.isEmpty())
+        continue;
+
+      if (proc->stageName(sid) == "EX" &&
+          std::any_of(executionStages.begin(), executionStages.end(),
+                      [&stageInfo](const FPUnicicleStageInfo &executionStage) {
+                        return executionStage.valid &&
+                               executionStage.pc == stageInfo.pc;
+                      }))
+        continue;
+
       auto mappingIt = sourceMapping.find(stageInfo.pc);
       if (mappingIt == sourceMapping.end()) {
         // No source line registerred for this PC.
@@ -467,10 +480,50 @@ void CodeEditor::updateHighlighting() {
 
         // Record the stage name for the highlighted block for later painting
         QString stageString = ProcessorHandler::getProcessor()->stageName(sid);
-        if (!stageInfo.namedState.isEmpty())
-          stageString += " (" + stageInfo.namedState + ")";
         highlightBlock(block, stageColor, stageString);
       }
+    }
+  }
+
+  for (const auto &fpStage : executionStages) {
+    if (!fpStage.valid)
+      continue;
+
+    const auto mappingIt = sourceMapping.find(fpStage.pc);
+    if (mappingIt == sourceMapping.end())
+      continue;
+
+    QString prefix;
+    QColor stageColor;
+    switch (fpStage.unit) {
+    case 0:
+      prefix = "EX";
+      stageColor = Colors::Gray;
+      break;
+    case 1:
+      prefix = "A";
+      stageColor = Colors::CyanBlue;
+      break;
+    case 2:
+      prefix = "M";
+      stageColor = Colors::CyanBlue;
+      break;
+    case 3:
+      prefix = "D";
+      stageColor = Colors::CyanBlue;
+      break;
+    default:
+      continue;
+    }
+    const QString stageString =
+        fpStage.unit == 0
+            ? prefix
+            : prefix + QString::number(fpStage.stage + 1);
+
+    for (const auto sourceLine : mappingIt->second) {
+      const QTextBlock block = document()->findBlockByLineNumber(sourceLine);
+      if (block.isValid())
+        highlightBlock(block, stageColor, stageString);
     }
   }
 }
