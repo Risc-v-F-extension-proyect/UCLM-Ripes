@@ -46,6 +46,7 @@ public:
     // Print syscalls
     emplace<PrintIntSyscall<RISCVSyscall>>(RVABI::PrintInt);
     emplace<PrintFloatSyscall<RISCVSyscall>>(RVABI::PrintFloat);
+    emplace<PrintDoubleSyscall<RISCVSyscall>>(RVABI::PrintDouble);
     emplace<PrintStrSyscall<RISCVSyscall>>(RVABI::PrintStr);
     emplace<PrintCharSyscall<RISCVSyscall>>(RVABI::PrintChar);
     emplace<PrintHexSyscall<RISCVSyscall>>(RVABI::PrintIntHex);
