@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="512px" height="512px" viewBox="0 0 455 455">
+  <g transform="translate(0 1) scale(1 0.995604)">
+    <g fill="none" stroke="#1976B8" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M92 228C120 228 115 78 145 78"/><path d="M92 228H145"/>
+      <path d="M92 228C120 228 115 378 145 378"/>
+      <path d="M227 78H285"/><path d="M227 228H285"/><path d="M227 378H285"/>
+      <path d="M367 78H421"/><path d="M367 228H421"/><path d="M367 378H421"/>
+      <path d="M407 64L421 78L407 92"/><path d="M407 214L421 228L407 242"/>
+      <path d="M407 364L421 378L407 392"/>
+    </g>
+    <g fill="#FBFDFD" stroke="#1976B8" stroke-width="16" stroke-linejoin="round">
+      <rect x="10" y="195" width="82" height="66" rx="14"/>
+      <rect x="145" y="45" width="82" height="66" rx="14"/>
+      <rect x="145" y="195" width="82" height="66" rx="14"/>
+      <rect x="145" y="345" width="82" height="66" rx="14"/>
+      <rect x="285" y="45" width="82" height="66" rx="14"/>
+      <rect x="285" y="195" width="82" height="66" rx="14"/>
+      <rect x="285" y="345" width="82" height="66" rx="14"/>
+    </g>
+    <g fill="#1976B8" font-family="Arial, Helvetica, sans-serif" font-weight="700" text-anchor="middle" dominant-baseline="middle">
+      <text x="51" y="228" font-size="26">ID</text><text x="186" y="78" font-size="26">A1</text>
+      <text x="186" y="228" font-size="26">M1</text><text x="186" y="378" font-size="26">D1</text>
+      <text x="326" y="78" font-size="26">A2</text><text x="326" y="228" font-size="26">M2</text>
+      <text x="326" y="378" font-size="26">D2</text>
+    </g>
+  </g>
+</svg>

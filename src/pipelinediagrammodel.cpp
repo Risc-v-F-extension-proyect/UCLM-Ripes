@@ -3,6 +3,7 @@
 #include "processorhandler.h"
 #include "ripessettings.h"
 
+#include <algorithm>
 #include <vector>
 
 namespace Ripes {
@@ -75,7 +76,11 @@ void PipelineDiagramModel::processorWasClocked() {
     const size_t targetSize = static_cast<size_t>(maxCycles);
     auto it = m_cycleStageInfos.begin();
     std::advance(it, m_cycleStageInfos.size() - targetSize);
+    const long long firstRetainedCycle = it->first;
     m_cycleStageInfos.erase(m_cycleStageInfos.begin(), it);
+    m_cycleFPStageInfos.erase(
+        m_cycleFPStageInfos.begin(),
+        m_cycleFPStageInfos.lower_bound(firstRetainedCycle));
 
     // Notify model views after data changes
     endResetModel();
@@ -85,6 +90,7 @@ void PipelineDiagramModel::processorWasClocked() {
 void PipelineDiagramModel::reset() {
   m_atMaxCycles = false;
   m_cycleStageInfos.clear();
+  m_cycleFPStageInfos.clear();
   gatherStageInfo();
 }
 
@@ -104,6 +110,8 @@ void PipelineDiagramModel::gatherStageInfo() {
   for (auto idx : ProcessorHandler::getProcessor()->structure().stageIt())
     m_cycleStageInfos[cycleCount][idx] =
         ProcessorHandler::getProcessor()->stageInfo(idx);
+  m_cycleFPStageInfos[cycleCount] =
+      ProcessorHandler::getProcessor()->fpUnicicleStageInfos();
 }
 
 QVariant PipelineDiagramModel::data(const QModelIndex &index, int role) const {
@@ -122,12 +130,23 @@ QVariant PipelineDiagramModel::data(const QModelIndex &index, int role) const {
 
   const AInt addr = indexToAddress(index.row());
   const auto &stageInfo = m_cycleStageInfos.at(index.column());
+  const auto fpStageIt = m_cycleFPStageInfos.find(index.column());
 
   QStringList stagesForAddr;
   QString stageStr;
   for (const auto &si : stageInfo) {
     if (si.second.pc == addr && si.second.stage_valid &&
         si.second.state == StageInfo::State::None) {
+      const bool representedByFPStage =
+          fpStageIt != m_cycleFPStageInfos.end() &&
+          std::any_of(fpStageIt->second.begin(), fpStageIt->second.end(),
+                      [addr](const FPUnicicleStageInfo &fpStage) {
+                        return fpStage.valid && fpStage.pc == addr;
+                      }) &&
+          ProcessorHandler::getProcessor()->stageName(si.first) == "EX";
+      if (representedByFPStage) {
+        continue;
+      }
       if (m_cycleStageInfos.count(index.column() - 1)) {
         const auto &prevCycleStageInfo =
             m_cycleStageInfos.at(index.column() - 1);
@@ -143,6 +162,21 @@ QVariant PipelineDiagramModel::data(const QModelIndex &index, int role) const {
                      ? ProcessorHandler::getProcessor()->stageName(si.first)
                      : si.second.namedState;
       stagesForAddr << stageStr;
+    }
+  }
+
+  if (fpStageIt != m_cycleFPStageInfos.end()) {
+    for (const auto &fpStage : fpStageIt->second) {
+      if (!fpStage.valid || fpStage.pc != addr) {
+        continue;
+      }
+      if (fpStage.unit == 0) {
+        stagesForAddr << "EX";
+      } else {
+        const QString prefix =
+            fpStage.unit == 1 ? "A" : fpStage.unit == 2 ? "M" : "D";
+        stagesForAddr << prefix + QString::number(fpStage.stage + 1);
+      }
     }
   }
 

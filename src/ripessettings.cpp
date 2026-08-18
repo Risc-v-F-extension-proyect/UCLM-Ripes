@@ -8,6 +8,20 @@
 
 namespace Ripes {
 
+namespace {
+bool isFALULatencySetting(const QString &key) {
+  return key == RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY ||
+         key == RIPES_SETTING_RV5S_FALU_MUL_LATENCY ||
+         key == RIPES_SETTING_RV5S_FALU_DIV_LATENCY;
+}
+
+QVariant constrainedSettingValue(const QString &key, const QVariant &value) {
+  if (isFALULatencySetting(key) && value.toUInt() < 2)
+    return 2;
+  return value;
+}
+} // namespace
+
 // ============= Definitions of all default settings within Ripes ==============
 const std::map<QString, QVariant> s_defaultSettings = {
     // User-modifyable settings
@@ -92,7 +106,7 @@ const std::map<QString, QVariant> s_defaultSettings = {
 
 void SettingObserver::setValue(const QVariant &v) {
   QSettings settings;
-  Q_ASSERT(settings.contains(m_key));
+  Q_ASSERT(s_defaultSettings.count(m_key) != 0);
   settings.setValue(m_key, v);
 
   emit modified(value());
@@ -116,6 +130,14 @@ RipesSettings::RipesSettings() {
     }
   }
 
+  // Migrate configurations saved before FP latencies acquired a minimum of 2.
+  for (const auto *key : {RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY,
+                          RIPES_SETTING_RV5S_FALU_MUL_LATENCY,
+                          RIPES_SETTING_RV5S_FALU_DIV_LATENCY}) {
+    const QVariant currentValue = settings.value(key);
+    settings.setValue(key, constrainedSettingValue(key, currentValue));
+  }
+
   // Create observer objects for each setting
   for (const auto &setting : s_defaultSettings) {
     m_observers.emplace(setting.first, setting.first);
@@ -127,7 +149,7 @@ SettingObserver *RipesSettings::getObserver(const QString &key) {
 }
 
 void RipesSettings::setValue(const QString &key, const QVariant &value) {
-  get().m_observers.at(key).setValue(value);
+  get().m_observers.at(key).setValue(constrainedSettingValue(key, value));
 }
 
 } // namespace Ripes

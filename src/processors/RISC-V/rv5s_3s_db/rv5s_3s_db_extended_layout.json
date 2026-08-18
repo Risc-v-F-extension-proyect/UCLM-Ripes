@@ -18872,6 +18872,13 @@
                             "enable",
                             "ifid_reg"
                         ]
+                    },
+                    {
+                        "key": 6,
+                        "value": [
+                            "instructionAccepted",
+                            "pcPersistence"
+                        ]
                     }
                 ],
                 "points": [
@@ -18910,6 +18917,10 @@
                     {
                         "first": 5,
                         "second": 1
+                    },
+                    {
+                        "first": 0,
+                        "second": 6
                     }
                 ]
             },
@@ -38915,6 +38926,10 @@
                         {
                             "key": "flowEnable",
                             "value": 1
+                        },
+                        {
+                            "key": "instructionAccepted",
+                            "value": 2
                         }
                     ]
                 }
@@ -38945,6 +38960,38 @@
                     "Pos": {
                         "x": 2286.0,
                         "y": 938.0
+                    },
+                    "Alignment": 132
+                },
+                "UserHidden": false,
+                "PortWidthVisible": false
+            },
+            "instructionAccepted": {
+                "Label": {
+                    "Visible": false,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 8,
+                    "Text": {
+                        "str": "instructionAccepted"
+                    },
+                    "Pos": {
+                        "x": 18.0,
+                        "y": 72.73205939896013
+                    },
+                    "Alignment": 132
+                },
+                "ValueLabel": {
+                    "Visible": false,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 10,
+                    "Text": {
+                        "str": "0"
+                    },
+                    "Pos": {
+                        "x": 2286.0,
+                        "y": 952.0
                     },
                     "Alignment": 132
                 },
@@ -43604,7 +43651,7 @@
             "Italic": false,
             "PtSize": 18,
             "Text": {
-                "str": "5-Stage RISC-V Processor (3-slot Predict Not Taken)  "
+                "str": "5-Stage RISC-V Processor (3-slot Delayed Branch)  "
             },
             "Pos": {
                 "x": 1103.223532676762,

@@ -13,6 +13,10 @@
 #include "processors/RISC-V/rv5s_no_fw/rv5s_no_fw.h"
 #include "processors/RISC-V/rv5s_no_fw_hz/rv5s_no_fw_hz.h"
 #include "processors/RISC-V/rv5s_no_hz/rv5s_no_hz.h"
+
+// The configurable pipeline variants are instantiated in this translation
+// unit; keep their header-only processor definitions part of its dependencies,
+// including per-processor ISA-extension filtering.
 #include "processors/RISC-V/rv6s_dual/rv6s_dual.h"
 #include "processors/RISC-V/rvss/rvss.h"
 

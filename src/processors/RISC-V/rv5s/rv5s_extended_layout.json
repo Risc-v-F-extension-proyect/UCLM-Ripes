@@ -2332,75 +2332,86 @@
                 "PortWidthVisible": false
             },
             "out_out_wire": {
-                "Parent": "5-Stage RISC-V Processor",
-                "From port": {
-                    "first": 0,
-                    "second": [
-                        "out",
-                        "controlflow_or"
-                    ]
-                },
-                "To ports": [
-                    {
-                        "key": 1,
-                        "value": [
-                            "in_0",
-                            "pc_select_or"
-                        ]
-                    },
-                    {
-                        "key": 2,
-                        "value": [
-                            "in_0",
-                            "efsc_or"
-                        ]
-                    }
-                ],
-                "points": [
-                    {
-                        "key": 3,
-                        "value": {
-                            "x": 280,
-                            "y": 56
-                        }
-                    },
-                    {
-                        "key": 4,
-                        "value": {
-                            "x": 1470,
-                            "y": 56
-                        }
-                    },
-                    {
-                        "key": 5,
-                        "value": {
-                            "x": 42,
-                            "y": 56
-                        }
-                    }
-                ],
-                "wires": [
-                    {
-                        "first": 4,
-                        "second": 5
-                    },
-                    {
-                        "first": 0,
-                        "second": 4
-                    },
-                    {
-                        "first": 4,
-                        "second": 3
-                    },
-                    {
-                        "first": 5,
-                        "second": 1
-                    },
-                    {
-                        "first": 0,
-                        "second": 2
-                    }
+              "Parent": "5-Stage RISC-V Processor",
+              "From port": {
+                "first": 0,
+                "second": [
+                  "out",
+                  "controlflow_or"
                 ]
+              },
+              "To ports": [
+                {
+                  "key": 1,
+                  "value": [
+                    "in_0",
+                    "pc_select_or"
+                  ]
+                },
+                {
+                  "key": 2,
+                  "value": [
+                    "in_0",
+                    "efsc_or"
+                  ]
+                },
+                {
+          "key": 6,
+          "value": [
+            "in_0",
+            "fee_enable_or"
+                  ]
+                }
+              ],
+              "points": [
+                {
+                  "key": 3,
+                  "value": {
+                    "x": 280,
+                    "y": 56
+                  }
+                },
+                {
+                  "key": 4,
+                  "value": {
+                    "x": 1470,
+                    "y": 56
+                  }
+                },
+                {
+                  "key": 5,
+                  "value": {
+                    "x": 42,
+                    "y": 56
+                  }
+                }
+              ],
+              "wires": [
+                {
+                  "first": 4,
+                  "second": 5
+                },
+                {
+                  "first": 0,
+                  "second": 4
+                },
+                {
+                  "first": 4,
+                  "second": 3
+                },
+                {
+                  "first": 5,
+                  "second": 1
+                },
+                {
+                  "first": 0,
+                  "second": 2
+                },
+        {
+          "first": 0,
+          "second": 6
+        }
+              ]
             },
             "Name label": {
                 "Visible": false,
@@ -14651,6 +14662,194 @@
                 "clear"
             ]
         },
+        "fee_enable_or": {
+          "Top name": "fee_enable_or",
+          "Rect": {
+            "x": 0,
+            "y": 0,
+            "w": 2,
+            "h": 3
+          },
+          "rot": 0,
+          "Pos": {
+            "x": 210,
+            "y": 770
+          },
+          "Visible": true,
+          "User hidden": false,
+          "Component border": [
+            {
+              "key": 0,
+              "value": [
+                {
+                  "key": "in_0",
+                  "value": 1
+                },
+                {
+                  "key": "in_1",
+                  "value": 2
+                }
+              ]
+            },
+            {
+              "key": 1,
+              "value": [
+                {
+                  "key": "out",
+                  "value": 2
+                }
+              ]
+            }
+          ],
+          "in_0": {
+            "Label": {
+              "Visible": false,
+              "Bold": false,
+              "Italic": false,
+              "PtSize": 8,
+              "Text": {
+                "str": "in_0"
+              },
+              "Pos": {
+                "x": 0.0,
+                "y": 14.0
+              },
+              "Alignment": 132
+            },
+            "ValueLabel": {
+              "Visible": false,
+              "Bold": false,
+              "Italic": false,
+              "PtSize": 10,
+              "Text": {
+                "str": "0x0"
+              },
+              "Pos": {
+                "x": 210.0,
+                "y": 784.0
+              },
+              "Alignment": 132
+            },
+            "UserHidden": false,
+            "PortWidthVisible": false
+          },
+          "in_1": {
+            "Label": {
+              "Visible": false,
+              "Bold": false,
+              "Italic": false,
+              "PtSize": 8,
+              "Text": {
+                "str": "in_1"
+              },
+              "Pos": {
+                "x": 0.0,
+                "y": 28.0
+              },
+              "Alignment": 132
+            },
+            "ValueLabel": {
+              "Visible": false,
+              "Bold": false,
+              "Italic": false,
+              "PtSize": 10,
+              "Text": {
+                "str": "0x1"
+              },
+              "Pos": {
+                "x": 210.0,
+                "y": 798.0
+              },
+              "Alignment": 132
+            },
+            "UserHidden": false,
+            "PortWidthVisible": false
+          },
+          "out": {
+            "Label": {
+              "Visible": false,
+              "Bold": false,
+              "Italic": false,
+              "PtSize": 8,
+              "Text": {
+                "str": "out"
+              },
+              "Pos": {
+                "x": 28.0,
+                "y": 28.0
+              },
+              "Alignment": 132
+            },
+            "ValueLabel": {
+              "Visible": false,
+              "Bold": false,
+              "Italic": false,
+              "PtSize": 10,
+              "Text": {
+                "str": "0x1"
+              },
+              "Pos": {
+                "x": 238.0,
+                "y": 798.0
+              },
+              "Alignment": 132
+            },
+            "UserHidden": false,
+            "PortWidthVisible": false
+          },
+          "out_out_wire": {
+            "Parent": "5-Stage RISC-V Processor",
+            "From port": {
+              "first": 0,
+              "second": [
+                "out",
+                "fee_enable_or"
+              ]
+            },
+            "To ports": [
+              {
+                "key": 1,
+                "value": [
+                  "enable",
+                  "pc_reg"
+                ]
+              },
+              {
+                "key": 2,
+                "value": [
+                  "enable",
+                  "ifid_reg"
+                ]
+              }
+            ],
+            "points": [],
+            "wires": [
+              {
+                "first": 0,
+                "second": 1
+              },
+              {
+                "first": 0,
+                "second": 2
+              }
+            ]
+          },
+          "Name label": {
+            "Visible": false,
+            "Bold": false,
+            "Italic": false,
+            "PtSize": 12,
+            "Text": {
+              "str": "fee_enable_or"
+            },
+            "Pos": {
+              "x": -39.7890625,
+              "y": -28.0
+            },
+            "Alignment": 132
+          },
+          "Indicators": []
+        },
         "fRegisterFile": {
             "Top name": "fRegisterFile",
             "Expanded": false,
@@ -18794,53 +18993,30 @@
                 ]
             },
             "hazardFEEnable_out_wire": {
-                "Parent": "5-Stage RISC-V Processor",
-                "From port": {
-                    "first": 0,
-                    "second": [
-                        "hazardFEEnable",
-                        "hzunit"
-                    ]
-                },
-                "To ports": [
-                    {
-                        "key": 1,
-                        "value": [
-                            "enable",
-                            "pc_reg"
-                        ]
-                    },
-                    {
-                        "key": 2,
-                        "value": [
-                            "enable",
-                            "ifid_reg"
-                        ]
-                    }
-                ],
-                "points": [
-                    {
-                        "key": 3,
-                        "value": {
-                            "x": 98,
-                            "y": 1008
-                        }
-                    }
-                ],
-                "wires": [
-                    {
-                        "first": 3,
-                        "second": 1
-                    },
-                    {
-                        "first": 0,
-                        "second": 3
-                    },
-                    {
-                        "first": 0,
-                        "second": 2
-                    }
+              "Parent": "5-Stage RISC-V Processor",
+              "From port": {
+                "first": 0,
+                "second": [
+                  "hazardFEEnable",
+                  "hzunit"
                 ]
+              },
+              "To ports": [
+                {
+                  "key": 1,
+                  "value": [
+                    "in_1",
+                    "fee_enable_or"
+                  ]
+                }
+              ],
+              "points": [],
+              "wires": [
+                {
+                  "first": 0,
+                  "second": 1
+                }
+              ]
             },
             "Name label": {
                 "Visible": true,

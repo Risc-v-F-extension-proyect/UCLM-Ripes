@@ -35,6 +35,8 @@ private:
    * map<cycle, map<stageId, stageInfo>>
    */
   std::map<long long, std::map<StageIndex, StageInfo>> m_cycleStageInfos;
+  std::map<long long, std::vector<FPUnicicleStageInfo>>
+      m_cycleFPStageInfos;
 
   /**
    * @brief m_atMaxCycles

@@ -18228,6 +18228,13 @@
                             "enable",
                             "ifid_reg"
                         ]
+                    },
+                    {
+                        "key": 4,
+                        "value": [
+                            "instructionAccepted",
+                            "pcPersistence"
+                        ]
                     }
                 ],
                 "points": [],
@@ -18243,6 +18250,10 @@
                     {
                         "first": 0,
                         "second": 2
+                    },
+                    {
+                        "first": 0,
+                        "second": 4
                     }
                 ]
             },
@@ -37747,7 +37758,7 @@
                 "x": 0,
                 "y": 0,
                 "w": 3,
-                "h": 4
+                "h": 5
             },
             "rot": 0,
             "Pos": {
@@ -37771,6 +37782,10 @@
                         {
                             "key": "flowEnable",
                             "value": 3
+                        },
+                        {
+                            "key": "instructionAccepted",
+                            "value": 4
                         }
                     ]
                 },
@@ -37814,6 +37829,38 @@
                     "Pos": {
                         "x": 8.703125,
                         "y": 562.0
+                    },
+                    "Alignment": 132
+                },
+                "UserHidden": false,
+                "PortWidthVisible": true
+            },
+            "instructionAccepted": {
+                "Label": {
+                    "Visible": true,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 8,
+                    "Text": {
+                        "str": "instructionAccepted"
+                    },
+                    "Pos": {
+                        "x": 0.0,
+                        "y": 56.0
+                    },
+                    "Alignment": 132
+                },
+                "ValueLabel": {
+                    "Visible": false,
+                    "Bold": false,
+                    "Italic": false,
+                    "PtSize": 10,
+                    "Text": {
+                        "str": "0"
+                    },
+                    "Pos": {
+                        "x": 8.703125,
+                        "y": 576.0
                     },
                     "Alignment": 132
                 },

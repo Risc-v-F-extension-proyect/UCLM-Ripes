@@ -7,6 +7,8 @@
 #include <QMenu>
 #include <QTextBlock>
 
+#include <algorithm>
+
 #include "colors.h"
 #include "fonts.h"
 #include "ripessettings.h"
@@ -104,20 +106,68 @@ void ProgramViewer::updateHighlightedAddresses() {
   const unsigned stages =
       ProcessorHandler::getProcessor()->structure().numStages();
   auto colorGenerator = Colors::incrementalRedGenerator(stages);
+  const auto executionStages =
+      ProcessorHandler::getProcessor()->fpUnicicleStageInfos();
 
   for (auto sid : ProcessorHandler::getProcessor()->structure().stageIt()) {
     const auto stageInfo = ProcessorHandler::getProcessor()->stageInfo(sid);
     if (stageInfo.stage_valid) {
+      if (!stageInfo.namedState.isEmpty())
+        continue;
+
+      if (ProcessorHandler::getProcessor()->stageName(sid) == "EX" &&
+          std::any_of(executionStages.begin(), executionStages.end(),
+                      [&stageInfo](const FPUnicicleStageInfo &executionStage) {
+                        return executionStage.valid &&
+                               executionStage.pc == stageInfo.pc;
+                      }))
+        continue;
+
       auto block = blockForAddress(stageInfo.pc);
       if (!block.isValid())
         continue;
 
       // Record the stage name for the highlighted block for later painting
       QString stageString = ProcessorHandler::getProcessor()->stageName(sid);
-      if (!stageInfo.namedState.isEmpty())
-        stageString += " (" + stageInfo.namedState + ")";
       highlightBlock(block, colorGenerator(), stageString);
     }
+  }
+
+  for (const auto &fpStage : executionStages) {
+    if (!fpStage.valid)
+      continue;
+
+    auto block = blockForAddress(fpStage.pc);
+    if (!block.isValid())
+      continue;
+
+    QString prefix;
+    QColor color;
+    switch (fpStage.unit) {
+    case 0:
+      prefix = "EX";
+      color = Colors::Gray;
+      break;
+    case 1:
+      prefix = "A";
+      color = Colors::CyanBlue;
+      break;
+    case 2:
+      prefix = "M";
+      color = Colors::CyanBlue;
+      break;
+    case 3:
+      prefix = "D";
+      color = Colors::CyanBlue;
+      break;
+    default:
+      continue;
+    }
+    const QString stageString =
+        fpStage.unit == 0
+            ? prefix
+            : prefix + QString::number(fpStage.stage + 1);
+    highlightBlock(block, color, stageString);
   }
 
   if (m_following) {

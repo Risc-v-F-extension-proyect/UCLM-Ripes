@@ -1,6 +1,7 @@
 #pragma once
 
 #include <set>
+#include <vector>
 
 #include <QAbstractTableModel>
 #include <QColor>
@@ -55,6 +56,7 @@ private:
   std::map<StageIndex, QString> m_stageNames;
   using StageID = unsigned;
   std::map<StageIndex, StageInfo> m_stageInfos;
+  std::vector<FPUnicicleStageInfo> m_executionStageInfos;
   int m_rowCount = 0;
 };
 } // namespace Ripes
