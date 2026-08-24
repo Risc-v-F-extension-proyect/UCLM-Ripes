@@ -41,6 +41,7 @@ struct FPUnicicleStageInfo {
   unsigned instance = 0;
 };
 
+<<<<<<< Updated upstream
 struct AdvancedExecutionStatistics {
   bool available = false;
   uint64_t instructionMemoryCycles = 0;
@@ -66,6 +67,8 @@ struct AdvancedExecutionStatistics {
   unsigned fpDivideUnitCount = 1;
 };
 
+=======
+>>>>>>> Stashed changes
 /// Address is byte-aligned, and the accessed bytes are [address : address +
 /// bytes[
 struct MemoryAccess {
@@ -250,10 +253,13 @@ public:
   virtual std::vector<FPUnicicleStageInfo> fpUnicicleStageInfos() const {
     return {};
   }
+<<<<<<< Updated upstream
   virtual AdvancedExecutionStatistics advancedExecutionStatistics() const {
     return {};
   }
 
+=======
+>>>>>>> Stashed changes
   /**
    * @brief breakpointTriggeringStages
    * @returns the stage indices for which a breakpoint is triggered when the

@@ -106,6 +106,8 @@ public:
     exmem_reg->do_branch_out >> *efsc_or->in[0];
 
     ecallChecker->syscallExit >> *efsc_or->in[1];
+    hzunit->setSquashIDCondition(
+        [this] { return ecallChecker->isSysCallExiting(); });
 
     efsc_or->out >> *efschz_or->in[0];
     hzunit->hazardIDEXClear >> *efschz_or->in[1];
@@ -592,6 +594,7 @@ public:
       }
     }
     return stages;
+<<<<<<< Updated upstream
   }
 
   AdvancedExecutionStatistics advancedExecutionStatistics() const override {
@@ -621,6 +624,8 @@ public:
       }
     }
     return statistics;
+=======
+>>>>>>> Stashed changes
   }
 
   void setProgramCounter(AInt address) override {
@@ -736,6 +741,7 @@ public:
   }
 
 private:
+<<<<<<< Updated upstream
   void saveAdvancedStatistics() {
     m_advancedStatisticsHistory.push_front(m_advancedStatistics);
 
@@ -803,6 +809,8 @@ private:
     }
   }
 
+=======
+>>>>>>> Stashed changes
   QString fpEXStageName() const {
     switch (HazardUnitState::unitTypeFor(
         idex_reg->opcode_out.eValue<RVInstr>())) {

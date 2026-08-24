@@ -66,6 +66,13 @@ public:
     fpHazard->setFPExtensionEnabled(enabled);
   }
 
+<<<<<<< Updated upstream
+=======
+  void setSquashIDCondition(std::function<bool()> condition) {
+    fpHazard->setSquashIDCondition(std::move(condition));
+  }
+
+>>>>>>> Stashed changes
   void setConfiguration(unsigned addLatency, unsigned multiplyLatency,
                         unsigned divideLatency, unsigned addCount,
                         unsigned multiplyCount, unsigned divideCount,

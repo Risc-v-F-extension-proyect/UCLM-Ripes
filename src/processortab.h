@@ -11,8 +11,11 @@
 #include "ripestab.h"
 
 QT_FORWARD_DECLARE_CLASS(QDialog)
+<<<<<<< Updated upstream
 QT_FORWARD_DECLARE_CLASS(QLabel)
 QT_FORWARD_DECLARE_CLASS(QTableWidget)
+=======
+>>>>>>> Stashed changes
 
 namespace vsrtl {
 class VSRTLWidget;
@@ -65,7 +68,10 @@ private slots:
   void setInstructionViewCenterRow(int row);
   void showPipelineDiagram();
   void showFPUnicicleDiagram();
+<<<<<<< Updated upstream
   void showAdvancedStatistics();
+=======
+>>>>>>> Stashed changes
   
   // Añado esto para ver si puedo conseguir recargar pestañas desde aquí cuando se cambie la config
  signals: 
@@ -84,9 +90,12 @@ private:
   InstructionModel *m_instrModel = nullptr;
   PipelineDiagramModel *m_stageModel = nullptr;
   FPUnicicleDiagramWidget *m_fpUnicicleDiagramWidget = nullptr;
+<<<<<<< Updated upstream
   QDialog *m_advancedStatisticsDialog = nullptr;
   QLabel *m_advancedStatisticsSummary = nullptr;
   QTableWidget *m_advancedStatisticsTable = nullptr;
+=======
+>>>>>>> Stashed changes
 
   vsrtl::VSRTLWidget *m_vsrtlWidget = nullptr;
 
@@ -104,7 +113,10 @@ private:
   QAction *m_displayValuesAction = nullptr;
   QAction *m_pipelineDiagramAction = nullptr;
   QAction *m_fpUnicicleDiagramAction = nullptr;
+<<<<<<< Updated upstream
   QAction *m_advancedStatisticsAction = nullptr;
+=======
+>>>>>>> Stashed changes
   QAction *m_reverseAction = nullptr;
   QAction *m_resetAction = nullptr;
   QAction *m_darkmodeAction = nullptr;

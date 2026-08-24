@@ -345,7 +345,7 @@ void ProcessorSelectionDialog::setupFALULatencyOptions() {
   grid->setHorizontalSpacing(10);
   grid->setVerticalSpacing(4);
 
-  const QStringList headers = {"Type", "Latency", "Count", "Seg."};
+  const QStringList headers = {"Type", "Latency", "Amount", "Seg."};
   for (int column = 0; column < headers.size(); ++column) {
     auto *header = new QLabel(headers.at(column));
     header->setContentsMargins(0, 12, 0, 0);
@@ -384,6 +384,7 @@ void ProcessorSelectionDialog::setupFALULatencyOptions() {
     updateCountAvailability(segmented->isChecked());
   };
 
+<<<<<<< Updated upstream
   addUnitRow(1, "add/sub", m_faluAddSubLatency,
              RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY, 7, m_faluAddSubCount,
              RIPES_SETTING_RV5S_FALU_ADDSUB_COUNT, m_faluAddSubPipelined,
@@ -393,6 +394,17 @@ void ProcessorSelectionDialog::setupFALULatencyOptions() {
              RIPES_SETTING_RV5S_FALU_MUL_COUNT, m_faluMulPipelined,
              RIPES_SETTING_RV5S_FALU_MUL_PIPELINED);
   addUnitRow(3, "div", m_faluDivLatency,
+=======
+  addUnitRow(1, "Add", m_faluAddSubLatency,
+             RIPES_SETTING_RV5S_FALU_ADDSUB_LATENCY, 7, m_faluAddSubCount,
+             RIPES_SETTING_RV5S_FALU_ADDSUB_COUNT, m_faluAddSubPipelined,
+             RIPES_SETTING_RV5S_FALU_ADDSUB_PIPELINED);
+  addUnitRow(2, "Mul", m_faluMulLatency,
+             RIPES_SETTING_RV5S_FALU_MUL_LATENCY, 12, m_faluMulCount,
+             RIPES_SETTING_RV5S_FALU_MUL_COUNT, m_faluMulPipelined,
+             RIPES_SETTING_RV5S_FALU_MUL_PIPELINED);
+  addUnitRow(3, "Div", m_faluDivLatency,
+>>>>>>> Stashed changes
              RIPES_SETTING_RV5S_FALU_DIV_LATENCY, 30, m_faluDivCount,
              RIPES_SETTING_RV5S_FALU_DIV_COUNT, m_faluDivPipelined,
              RIPES_SETTING_RV5S_FALU_DIV_PIPELINED);

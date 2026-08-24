@@ -5,7 +5,10 @@
 #include <QDialog>
 #include <QFontMetrics>
 #include <QHeaderView>
+<<<<<<< Updated upstream
 #include <QLabel>
+=======
+>>>>>>> Stashed changes
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScrollBar>
@@ -16,6 +19,8 @@
 
 #include <limits>
 #include <vector>
+
+#include <limits>
 
 #include "consolewidget.h"
 #include "fpuniciclediagramwidget.h"
@@ -108,6 +113,7 @@ ProcessorTab::ProcessorTab(QToolBar *controlToolbar,
 
   m_stageModel = new PipelineDiagramModel(this);
   m_fpUnicicleDiagramWidget = new FPUnicicleDiagramWidget(this);
+<<<<<<< Updated upstream
   m_advancedStatisticsDialog = new QDialog(this);
   m_advancedStatisticsDialog->setWindowFlag(Qt::Window, true);
   m_advancedStatisticsDialog->setWindowTitle(
@@ -140,6 +146,8 @@ ProcessorTab::ProcessorTab(QToolBar *controlToolbar,
       QAbstractItemView::NoSelection);
   statisticsLayout->addWidget(m_advancedStatisticsTable);
 
+=======
+>>>>>>> Stashed changes
   updateInstructionModel();
   connect(ProcessorHandler::get(), &ProcessorHandler::procStateChangedNonRun,
           this, &ProcessorTab::updateStatistics);
@@ -369,6 +377,7 @@ void ProcessorTab::setupSimulatorActions(QToolBar *controlToolbar) {
           &ProcessorTab::showFPUnicicleDiagram);
   m_toolbar->addAction(m_fpUnicicleDiagramAction);
 
+<<<<<<< Updated upstream
   const QIcon advancedStatisticsIcon(":/icons/advanced-statistics.svg");
   m_advancedStatisticsAction = new QAction(
       advancedStatisticsIcon, "Show advanced execution statistics", this);
@@ -378,6 +387,8 @@ void ProcessorTab::setupSimulatorActions(QToolBar *controlToolbar) {
           &ProcessorTab::showAdvancedStatistics);
   m_toolbar->addAction(m_advancedStatisticsAction);
 
+=======
+>>>>>>> Stashed changes
   m_darkmodeAction = new QAction("Processor darkmode", this);
   m_darkmodeAction->setCheckable(true);
   connect(m_darkmodeAction, &QAction::toggled, m_vsrtlWidget,
@@ -687,7 +698,10 @@ void ProcessorTab::enableSimulatorControls() {
   m_targetCycle->setEnabled(true);
   m_pipelineDiagramAction->setEnabled(true);
   m_fpUnicicleDiagramAction->setEnabled(true);
+<<<<<<< Updated upstream
   m_advancedStatisticsAction->setEnabled(true);
+=======
+>>>>>>> Stashed changes
 }
 
 void ProcessorTab::updateInstructionLabels() {
@@ -833,7 +847,10 @@ void ProcessorTab::autoClock(bool state) {
   m_displayValuesAction->setEnabled(!state);
   m_pipelineDiagramAction->setEnabled(!state);
   m_fpUnicicleDiagramAction->setEnabled(!state);
+<<<<<<< Updated upstream
   m_advancedStatisticsAction->setEnabled(!state);
+=======
+>>>>>>> Stashed changes
   m_runAction->setEnabled(!state);
 }
 
@@ -861,7 +878,10 @@ void ProcessorTab::run(bool state) {
   m_displayValuesAction->setEnabled(!state);
   m_pipelineDiagramAction->setEnabled(!state);
   m_fpUnicicleDiagramAction->setEnabled(!state);
+<<<<<<< Updated upstream
   m_advancedStatisticsAction->setEnabled(!state);
+=======
+>>>>>>> Stashed changes
 
   // Disable widgets which are not updated when running the processor
   m_vsrtlWidget->setEnabled(!state);
@@ -888,10 +908,13 @@ void ProcessorTab::showFPUnicicleDiagram() {
   });
 }
 
+<<<<<<< Updated upstream
 void ProcessorTab::showAdvancedStatistics() {
   updateAdvancedStatistics();
   m_advancedStatisticsDialog->show();
   m_advancedStatisticsDialog->raise();
   m_advancedStatisticsDialog->activateWindow();
 }
+=======
+>>>>>>> Stashed changes
 } // namespace Ripes

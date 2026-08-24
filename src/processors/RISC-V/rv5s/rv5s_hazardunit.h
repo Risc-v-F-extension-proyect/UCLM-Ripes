@@ -718,6 +718,7 @@ private:
     return false;
   }
 
+<<<<<<< Updated upstream
   void prioritizeControlFlowAt(uint64_t cycle) {
     uint64_t priorityInstructionId = 0;
     for (const auto &unit : functionalUnitList) {
@@ -744,6 +745,26 @@ private:
           occupiedCycles.insert(instruction.emissionCycle);
       }
     }
+=======
+  // Reserva la salida comun para una instruccion de control que acaba de ser
+  // aceptada en ID. El salto aun no esta almacenado, por lo que todas las
+  // reservas existentes que formen el bloque contiguo desde cycle deben
+  // desplazarse un ciclo.
+  void prioritizeIncomingControlFlowAt(uint64_t cycle) {
+    std::set<uint64_t> occupiedCycles;
+
+    for (const auto &unit : functionalUnitList) {
+      for (const auto &instruction : unit.stages) {
+        if (instruction.valid && instruction.emissionCycle >= cycle)
+          occupiedCycles.insert(instruction.emissionCycle);
+      }
+    }
+
+    // Si el ciclo ideal del salto esta libre no hay nada que replanificar.
+    if (occupiedCycles.count(cycle) == 0)
+      return;
+
+>>>>>>> Stashed changes
     uint64_t firstFreeCycle = cycle;
     while (occupiedCycles.count(firstFreeCycle) != 0)
       ++firstFreeCycle;
@@ -752,9 +773,12 @@ private:
       for (auto &instruction : unit.stages) {
         if (!instruction.valid)
           continue;
+<<<<<<< Updated upstream
         if (instruction.id == priorityInstructionId) {
           continue;
         }
+=======
+>>>>>>> Stashed changes
         if (instruction.emissionCycle >= cycle &&
             instruction.emissionCycle < firstFreeCycle) {
           ++instruction.emissionCycle;
@@ -855,7 +879,11 @@ public:
     };
     stallEcallHandling << [this] { return hasEcallHazard(); };
     emissionCycle << [this] {
+<<<<<<< Updated upstream
       if (!fpEnabled || !id_valid.uValue())
+=======
+      if (!fpEnabled || !id_valid.uValue() || shouldSquashID())
+>>>>>>> Stashed changes
         return VSRTL_VT_U(0);
       const auto decision = extendedDecision();
       return decision.canAdvance
@@ -882,6 +910,13 @@ public:
     externalAcceptanceCondition = std::move(condition);
   }
 
+<<<<<<< Updated upstream
+=======
+  void setSquashIDCondition(std::function<bool()> condition) {
+    squashIDCondition = std::move(condition);
+  }
+
+>>>>>>> Stashed changes
   const std::vector<FunctionalUnit> &functionalUnits() const {
     return state->functionalUnits();
   }
@@ -917,7 +952,10 @@ public:
   INPUTPORT(id_reg_wr_idx, c_RVRegsBits);
   INPUTPORT(id_valid, 1);
   INPUTPORT(id_pc, 64);
+<<<<<<< Updated upstream
 
+=======
+>>>>>>> Stashed changes
   INPUTPORT(ex_reg_wr_idx, c_RVRegsBits);
   INPUTPORT(ex_do_mem_read_en, 1);
   INPUTPORT(ex_do_reg_write_en, 1);
@@ -946,6 +984,10 @@ private:
   bool fpEnabled = false;
   bool threeSlotSpeculation = false;
   std::function<bool()> externalAcceptanceCondition = [] { return true; };
+<<<<<<< Updated upstream
+=======
+  std::function<bool()> squashIDCondition;
+>>>>>>> Stashed changes
 
   struct SourceUsage {
     bool usesRs1 = false;
@@ -1080,8 +1122,13 @@ private:
   }
 
   bool extendedInstructionAccepted() const {
+<<<<<<< Updated upstream
     if (!fpEnabled || !id_valid.uValue() || !externalAcceptanceCondition() ||
         hasEcallHazard() ||
+=======
+    if (!fpEnabled || !id_valid.uValue() || shouldSquashID() ||
+        !externalAcceptanceCondition() || hasEcallHazard() ||
+>>>>>>> Stashed changes
         (threeSlotSpeculation && branchTakenFromMEM.uValue()) ||
         hasIncomingEcallHazard() ||
         hasLoadUseHazard() ||
@@ -1090,6 +1137,15 @@ private:
     return extendedDecision().canAdvance;
   }
 
+<<<<<<< Updated upstream
+=======
+  bool shouldSquashID() const {
+    if (!squashIDCondition)
+      return false;
+    return squashIDCondition();
+  }
+
+>>>>>>> Stashed changes
   static bool writesFPRegister(RVInstr instruction) {
     switch (instruction) {
     case RVInstr::FLW:
@@ -1296,9 +1352,16 @@ inline void HazardUnitState::save() {
     branchAwaitingResolution = false;
   }
 
+<<<<<<< Updated upstream
   // La decision se calcula sobre el estado anterior al flanco. Primero se
   // desplazan/liberan las FU y despues se confirma la instruccion que ID
   // realmente ha aceptado en ese mismo flanco.
+=======
+  // La decision se calcula sobre el estado anterior al flanco. Si una
+  // instruccion de control de 3 slots ha sido aceptada en ID, se reserva aqui
+  // su salida ideal antes de que la siguiente instruccion pueda ser analizada
+  // en ID durante el proximo ciclo.
+>>>>>>> Stashed changes
   const IncomingInstruction incoming = owner->incomingFromID();
   const Decision decision = analyze(incoming);
   const bool accepted = owner->extendedInstructionAccepted();
@@ -1306,8 +1369,13 @@ inline void HazardUnitState::save() {
   const bool emittedControlFlow =
       prioritizeControlFlow && controlFlowEmitsAt(nextCycle);
 
+<<<<<<< Updated upstream
   if (emittedControlFlow)
     prioritizeControlFlowAt(nextCycle);
+=======
+  if (prioritizeControlFlow && accepted && isControlFlow(incoming.opcode))
+    prioritizeIncomingControlFlowAt(decision.emissionCycle);
+>>>>>>> Stashed changes
 
   updateFunctionalUnits(nextCycle);
   updateRegisterStatuses(nextCycle);
